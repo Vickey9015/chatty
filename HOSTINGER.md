@@ -19,6 +19,8 @@
 |----------|--------|
 | `NODE_ENV` | `production` |
 
+**Note:** The build installs client dev tools (Vite, TypeScript) automatically via `--include=dev`. You do not need a separate install command.
+
 ## After changing settings
 
 1. **Settings and redeploy**
@@ -31,7 +33,7 @@
 - Use Node **20.x** (not 22.x if builds keep failing)
 - Install must be `npm install` (do not use `--omit=dev`)
 - Build logs should show `vite build` and `Copied client/dist → public/`
-- If you only see ~13 packages installed, redeploy after the latest `main` commit (`prebuild` fix)
+- Client install must show **~190+ packages**, not 13. If you see only 13, redeploy the latest `main` (`--include=dev` fix)
 
 ### 403 Forbidden
 
