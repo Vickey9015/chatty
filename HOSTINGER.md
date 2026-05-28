@@ -1,12 +1,12 @@
 # Deploy on Hostinger (chatty.vickeybuilds.com)
 
-## hPanel build settings
+## hPanel build settings (copy exactly)
 
 | Setting | Value |
 |---------|--------|
-| **Framework** | **Express.js** (preferred) or Other |
+| **Framework** | Express.js (or Other) |
 | **Root directory** | `./` |
-| **Node.js version** | 20.x |
+| **Node.js version** | **20.x** (recommended) |
 | **Install command** | `npm install` |
 | **Build command** | `npm run build` |
 | **Start command** | `npm start` |
@@ -15,27 +15,35 @@
 
 ## Environment variables
 
-Add in hPanel → **Environment variables**:
-
 | Variable | Value |
 |----------|--------|
 | `NODE_ENV` | `production` |
 
-(`PORT` is set automatically by Hostinger — do not override.)
+## After changing settings
 
-## Fix 403 Forbidden
+1. **Settings and redeploy**
+2. If the site shows 403, click **Restart** on the Node.js dashboard
 
-A **403** usually means the domain is serving an empty/static folder instead of your Node app.
+## Troubleshooting
 
-1. **Redeploy** after the latest commit (root `index.js` + `public/` folder).
-2. Set **Entry file** to `index.js` (not `server/index.js`).
-3. Set **Output directory** to `public` (build copies the React app there).
-4. Set **Framework** to **Express.js** if available.
-5. Click **Restart** on the Node.js dashboard (next to “Running”).
-6. Check **Runtime logs** — you should see: `ChitChat server (app + API)`.
+### Build failed
 
-If it still fails, open **Runtime logs** and look for errors, then share the last 20 lines.
+- Use Node **20.x** (not 22.x if builds keep failing)
+- Install must be `npm install` (do not use `--omit=dev`)
+- Build logs should show `vite build` and `Copied client/dist → public/`
+- If you only see ~13 packages installed, redeploy after the latest `main` commit (`prebuild` fix)
 
-## Redeploy
+### 403 Forbidden
 
-Deployments → **Redeploy** (or push to `main` for auto-deploy).
+- Entry file must be `index.js`
+- Output directory must be `public`
+- Add `NODE_ENV=production` in environment variables
+- Check **Runtime logs** for `ChitChat server (app + API)`
+
+### Runtime logs
+
+Open **Runtime logs** in hPanel. A healthy start looks like:
+
+```
+ChitChat server (app + API) → http://0.0.0.0:XXXX
+```

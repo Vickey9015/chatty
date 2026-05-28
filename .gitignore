@@ -1,6 +1,7 @@
 node_modules/
 dist/
-public/
+public/*
+!public/.gitkeep
 uploads/
 *.log
 .DS_Store
