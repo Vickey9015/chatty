@@ -1,35 +1,41 @@
 # Deploy on Hostinger (chatty.vickeybuilds.com)
 
-Use these **exact** settings in hPanel → Deployments → Settings:
+## hPanel build settings
 
 | Setting | Value |
 |---------|--------|
-| **Framework** | Other |
+| **Framework** | **Express.js** (preferred) or Other |
 | **Root directory** | `./` |
-| **Node.js version** | 20.x (or 22.x) |
+| **Node.js version** | 20.x |
 | **Install command** | `npm install` |
 | **Build command** | `npm run build` |
 | **Start command** | `npm start` |
-| **Entry file** | `server/index.js` |
-| **Output directory** | *(leave empty)* |
+| **Entry file** | `index.js` |
+| **Output directory** | `public` |
 
-Do **not** set output directory to `client/dist` — the Node server serves the built app.
+## Environment variables
 
-### Environment variables (optional)
+Add in hPanel → **Environment variables**:
 
 | Variable | Value |
 |----------|--------|
 | `NODE_ENV` | `production` |
-| `PORT` | *(leave default — Hostinger sets this)* |
 
-### After fixing settings
+(`PORT` is set automatically by Hostinger — do not override.)
 
-Click **Redeploy** on the latest commit.
+## Fix 403 Forbidden
 
-### If build still fails
+A **403** usually means the domain is serving an empty/static folder instead of your Node app.
 
-Check build logs for the first red error line. Common fixes:
+1. **Redeploy** after the latest commit (root `index.js` + `public/` folder).
+2. Set **Entry file** to `index.js` (not `server/index.js`).
+3. Set **Output directory** to `public` (build copies the React app there).
+4. Set **Framework** to **Express.js** if available.
+5. Click **Restart** on the Node.js dashboard (next to “Running”).
+6. Check **Runtime logs** — you should see: `ChitChat server (app + API)`.
 
-1. **Redeploy** after pulling the latest `main` (includes `postinstall` fix).
-2. Use Node **20.x** instead of 22.x.
-3. Ensure install command is `npm install` (not `npm ci` alone unless lockfiles are synced).
+If it still fails, open **Runtime logs** and look for errors, then share the last 20 lines.
+
+## Redeploy
+
+Deployments → **Redeploy** (or push to `main` for auto-deploy).

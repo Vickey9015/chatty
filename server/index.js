@@ -19,8 +19,9 @@ const app = express();
 const httpServer = createServer(app);
 
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
-const isProduction = process.env.NODE_ENV === 'production';
-const serveClient = isProduction && fs.existsSync(clientDist);
+const publicDir = path.join(__dirname, '..', 'public');
+const staticDir = fs.existsSync(clientDist) ? clientDist : fs.existsSync(publicDir) ? publicDir : null;
+const serveClient = staticDir !== null;
 
 const allowedOrigins = process.env.CLIENT_URL
   ? process.env.CLIENT_URL.split(',').map((o) => o.trim())
@@ -148,14 +149,19 @@ io.on('connection', (socket) => {
   });
 });
 
-if (serveClient) {
-  app.use(express.static(clientDist));
-  app.get(/^(?!\/api|\/uploads|\/socket\.io).*/, (_req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
+if (serveClient && staticDir) {
+  app.use(express.static(staticDir));
+  app.get(/^(?!\/api|\/uploads|\/socket\.io|\/health).*/, (_req, res) => {
+    res.sendFile(path.join(staticDir, 'index.html'));
   });
 }
 
 const PORT = Number(process.env.PORT) || 3001;
+
+app.get('/health', (_req, res) => {
+  res.json({ ok: true, static: serveClient, port: PORT });
+});
+
 httpServer.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(
@@ -165,7 +171,8 @@ httpServer.on('error', (err) => {
   }
   throw err;
 });
-httpServer.listen(PORT, () => {
+const HOST = process.env.HOST || '0.0.0.0';
+httpServer.listen(PORT, HOST, () => {
   const mode = serveClient ? 'app + API' : 'API only (run client separately in dev)';
-  console.log(`ChitChat server (${mode}) → http://localhost:${PORT}`);
+  console.log(`ChitChat server (${mode}) → http://${HOST}:${PORT}`);
 });
