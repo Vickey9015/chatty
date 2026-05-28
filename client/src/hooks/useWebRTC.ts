@@ -3,14 +3,29 @@ import type { Socket } from 'socket.io-client';
 import type { CallState } from '../types';
 
 const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ],
 };
+
+function mergeRemoteTrack(prev: MediaStream | null, event: RTCTrackEvent): MediaStream {
+  const stream = prev ?? new MediaStream();
+  const track = event.track;
+  if (!stream.getTracks().some((t) => t.id === track.id)) {
+    stream.addTrack(track);
+  }
+  return stream;
+}
 
 export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const remoteIdRef = useRef<string | null>(null);
   const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
+  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const callStatusRef = useRef<CallState['status']>('idle');
 
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
@@ -22,43 +37,104 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
   const [muted, setMuted] = useState(false);
   const [videoOff, setVideoOff] = useState(false);
 
+  const updateCall = useCallback((next: CallState | ((prev: CallState) => CallState)) => {
+    setCall((prev) => {
+      const resolved = typeof next === 'function' ? next(prev) : next;
+      callStatusRef.current = resolved.status;
+      return resolved;
+    });
+  }, []);
+
+  const setRemote = useCallback((stream: MediaStream | null) => {
+    remoteStreamRef.current = stream;
+    setRemoteStream(stream);
+  }, []);
+
   const cleanup = useCallback(() => {
     peerRef.current?.close();
     peerRef.current = null;
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
+    remoteStreamRef.current = null;
     remoteIdRef.current = null;
     pendingOfferRef.current = null;
+    pendingCandidatesRef.current = [];
     setLocalStream(null);
-    setRemoteStream(null);
+    setRemote(null);
     setMuted(false);
     setVideoOff(false);
-    setCall({ status: 'idle', remoteUserId: null, remoteUsername: null });
+    updateCall({ status: 'idle', remoteUserId: null, remoteUsername: null });
+  }, [setRemote, updateCall]);
+
+  const flushPendingCandidates = useCallback(async (peer: RTCPeerConnection) => {
+    const pending = [...pendingCandidatesRef.current];
+    pendingCandidatesRef.current = [];
+    for (const candidate of pending) {
+      try {
+        await peer.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch {
+        /* ignore stale candidates */
+      }
+    }
   }, []);
 
-  const setupPeer = useCallback((stream: MediaStream) => {
-    const peer = new RTCPeerConnection(ICE_SERVERS);
-    stream.getTracks().forEach((track) => peer.addTrack(track, stream));
-
-    peer.ontrack = (event) => {
-      setRemoteStream(event.streams[0]);
-    };
-
-    peer.onicecandidate = (event) => {
-      if (event.candidate && remoteIdRef.current) {
-        socketRef.current?.emit('ice_candidate', {
-          to: remoteIdRef.current,
-          candidate: event.candidate,
-        });
+  const addIceCandidate = useCallback(
+    async (candidate: RTCIceCandidateInit) => {
+      const peer = peerRef.current;
+      if (!peer) {
+        pendingCandidatesRef.current.push(candidate);
+        return;
       }
-    };
+      if (!peer.remoteDescription) {
+        pendingCandidatesRef.current.push(candidate);
+        return;
+      }
+      try {
+        await peer.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch {
+        /* ignore */
+      }
+    },
+    [],
+  );
 
-    peerRef.current = peer;
-    return peer;
-  }, [socketRef]);
+  const setupPeer = useCallback(
+    (stream: MediaStream) => {
+      const peer = new RTCPeerConnection(ICE_SERVERS);
+
+      stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+
+      peer.ontrack = (event) => {
+        const merged = mergeRemoteTrack(remoteStreamRef.current, event);
+        setRemote(merged);
+      };
+
+      peer.onicecandidate = (event) => {
+        if (event.candidate && remoteIdRef.current) {
+          socketRef.current?.emit('ice_candidate', {
+            to: remoteIdRef.current,
+            candidate: event.candidate,
+          });
+        }
+      };
+
+      peer.onconnectionstatechange = () => {
+        if (peer.connectionState === 'failed') {
+          console.warn('WebRTC connection failed');
+        }
+      };
+
+      peerRef.current = peer;
+      return peer;
+    },
+    [socketRef, setRemote],
+  );
 
   const getMedia = useCallback(async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user' },
+      audio: true,
+    });
     localStreamRef.current = stream;
     setLocalStream(stream);
     return stream;
@@ -68,7 +144,9 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
     async (targetId: string, targetName: string) => {
       try {
         remoteIdRef.current = targetId;
-        setCall({ status: 'calling', remoteUserId: targetId, remoteUsername: targetName });
+        pendingCandidatesRef.current = [];
+        setRemote(null);
+        updateCall({ status: 'calling', remoteUserId: targetId, remoteUsername: targetName });
 
         const stream = await getMedia();
         const peer = setupPeer(stream);
@@ -80,7 +158,7 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
         alert('Could not access camera/microphone. Please allow permissions.');
       }
     },
-    [getMedia, setupPeer, socketRef, cleanup],
+    [getMedia, setupPeer, socketRef, cleanup, setRemote, updateCall],
   );
 
   const acceptCall = useCallback(async () => {
@@ -89,18 +167,20 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
     if (!remoteId || !offer) return;
 
     try {
+      setRemote(null);
       const stream = await getMedia();
       const peer = setupPeer(stream);
       await peer.setRemoteDescription(new RTCSessionDescription(offer));
+      await flushPendingCandidates(peer);
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
       socketRef.current?.emit('answer_call', { to: remoteId, signal: answer });
-      setCall((c) => ({ ...c, status: 'active' }));
+      updateCall((c) => ({ ...c, status: 'active' }));
     } catch {
       cleanup();
       alert('Could not access camera/microphone.');
     }
-  }, [getMedia, setupPeer, socketRef, cleanup]);
+  }, [getMedia, setupPeer, socketRef, cleanup, flushPendingCandidates, setRemote, updateCall]);
 
   const rejectCall = useCallback(() => {
     if (remoteIdRef.current) {
@@ -129,31 +209,30 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
       username: string;
       signal: RTCSessionDescriptionInit;
     }) => {
-      if (call.status !== 'idle') {
+      if (callStatusRef.current !== 'idle') {
         socket.emit('end_call', { to: from });
         return;
       }
       remoteIdRef.current = from;
       pendingOfferRef.current = signal;
-      setCall({ status: 'incoming', remoteUserId: from, remoteUsername: username });
+      pendingCandidatesRef.current = [];
+      updateCall({ status: 'incoming', remoteUserId: from, remoteUsername: username });
     };
 
     const onAccepted = async ({ signal }: { signal: RTCSessionDescriptionInit }) => {
       const peer = peerRef.current;
       if (!peer) return;
-      await peer.setRemoteDescription(new RTCSessionDescription(signal));
-      setCall((c) => ({ ...c, status: 'active' }));
+      try {
+        await peer.setRemoteDescription(new RTCSessionDescription(signal));
+        await flushPendingCandidates(peer);
+        updateCall((c) => ({ ...c, status: 'active' }));
+      } catch (err) {
+        console.error('Failed to handle call answer', err);
+      }
     };
 
-    const onIce = async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
-      const peer = peerRef.current;
-      if (peer && candidate) {
-        try {
-          await peer.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch {
-          /* ignore late candidates */
-        }
-      }
+    const onIce = ({ candidate }: { candidate: RTCIceCandidateInit }) => {
+      if (candidate) void addIceCandidate(candidate);
     };
 
     const onEnded = () => cleanup();
@@ -169,7 +248,7 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
       socket.off('ice_candidate', onIce);
       socket.off('call_ended', onEnded);
     };
-  }, [socketRef, call.status, cleanup]);
+  }, [socketRef, cleanup, addIceCandidate, flushPendingCandidates, updateCall]);
 
   const toggleMute = () => {
     localStreamRef.current?.getAudioTracks().forEach((t) => {

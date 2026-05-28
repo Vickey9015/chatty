@@ -14,6 +14,18 @@ interface Props {
   onToggleVideo: () => void;
 }
 
+function attachStream(video: HTMLVideoElement | null, stream: MediaStream | null) {
+  if (!video) return;
+  if (video.srcObject !== stream) {
+    video.srcObject = stream;
+  }
+  if (stream) {
+    void video.play().catch(() => {
+      /* autoplay may need user gesture */
+    });
+  }
+}
+
 export function VideoCall({
   call,
   localStream,
@@ -30,21 +42,25 @@ export function VideoCall({
   const remoteRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (localRef.current) localRef.current.srcObject = localStream;
-  }, [localStream]);
+    attachStream(localRef.current, localStream);
+  }, [localStream, call.status]);
 
   useEffect(() => {
-    if (remoteRef.current) remoteRef.current.srcObject = remoteStream;
-  }, [remoteStream]);
+    attachStream(remoteRef.current, remoteStream);
+  }, [remoteStream, call.status]);
 
   if (call.status === 'idle') return null;
+
+  const showVideos = call.status === 'active' || call.status === 'calling';
 
   return (
     <div className="video-call-overlay">
       <div className="video-call-panel">
         {call.status === 'incoming' && (
           <div className="call-banner incoming">
-            <p>Incoming call from <strong>{call.remoteUsername}</strong></p>
+            <p>
+              Incoming call from <strong>{call.remoteUsername}</strong>
+            </p>
             <div className="call-actions">
               <button type="button" className="btn-accept" onClick={onAccept}>
                 Accept
@@ -58,21 +74,36 @@ export function VideoCall({
 
         {call.status === 'calling' && (
           <div className="call-banner">
-            <p>Calling <strong>{call.remoteUsername}</strong>…</p>
+            <p>
+              Calling <strong>{call.remoteUsername}</strong>…
+            </p>
             <button type="button" className="btn-reject" onClick={onEnd}>
               Cancel
             </button>
           </div>
         )}
 
-        {(call.status === 'active' || call.status === 'calling') && (
+        {showVideos && (
           <div className="video-grid">
-            <video ref={remoteRef} autoPlay playsInline className="video-remote" />
-            <video ref={localRef} autoPlay playsInline muted className="video-local" />
+            <video
+              ref={remoteRef}
+              autoPlay
+              playsInline
+              className={`video-remote ${!remoteStream ? 'video-hidden' : ''}`}
+            />
+            {!remoteStream && <div className="video-remote video-placeholder">Waiting for video…</div>}
+            <video
+              ref={localRef}
+              autoPlay
+              playsInline
+              muted
+              className={`video-local ${!localStream ? 'video-hidden' : ''}`}
+            />
+            {!localStream && <div className="video-local video-placeholder">Starting camera…</div>}
           </div>
         )}
 
-        {(call.status === 'active' || call.status === 'calling') && (
+        {showVideos && (
           <div className="call-controls">
             <button type="button" onClick={onToggleMute} title={muted ? 'Unmute' : 'Mute'}>
               {muted ? '🔇' : '🎤'}
