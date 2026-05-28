@@ -2,6 +2,12 @@
 
 Repo: [github.com/Vickey9015/chatty](https://github.com/Vickey9015/chatty)
 
+## Hostinger Node.js
+
+See **[HOSTINGER.md](./HOSTINGER.md)** for hPanel build/start settings.
+
+Quick: Install `npm install` → Build `npm run build` → Start `npm start` → Entry `server/index.js`
+
 ## One-command VPS setup (Ubuntu)
 
 SSH into your server, then:

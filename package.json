@@ -3,17 +3,29 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=18 <=24"
+  },
   "scripts": {
+    "postinstall": "npm install --prefix server && npm install --prefix client",
     "predev": "node scripts/free-ports.js",
     "dev": "concurrently -k \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "install:all": "npm install && npm install --prefix server && npm install --prefix client",
     "build": "npm run build --prefix client",
-    "start": "NODE_ENV=production npm run start --prefix server",
+    "start": "NODE_ENV=production node server/index.js",
     "prod": "npm run build && npm run start",
     "deploy:build": "npm run install:all && npm run build",
     "deploy": "npm run deploy:build && npx pm2 start ecosystem.config.cjs --update-env || npx pm2 restart chatty",
     "deploy:stop": "npx pm2 stop chatty",
     "deploy:logs": "npx pm2 logs chatty"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1",
+    "socket.io": "^4.8.1",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
