@@ -501,6 +501,11 @@ body {
   padding: 1rem;
 }
 
+.video-call-overlay.video-call-fullscreen {
+  padding: 0;
+  background: #000;
+}
+
 .video-call-panel {
   width: 100%;
   max-width: 900px;
@@ -508,6 +513,17 @@ body {
   border-radius: 16px;
   overflow: hidden;
   border: 1px solid var(--border);
+}
+
+.video-call-panel.video-call-panel-fullscreen {
+  position: fixed;
+  inset: 0;
+  max-width: none;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  background: #000;
 }
 
 .call-banner {
@@ -518,6 +534,22 @@ body {
 
 .call-banner.incoming {
   border-bottom: 1px solid var(--border);
+}
+
+.call-banner-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.75), transparent);
+  border: none;
+  padding: 1.5rem 1rem 2.5rem;
+}
+
+.call-banner-overlay p {
+  color: #fff;
+  margin-bottom: 0.75rem;
 }
 
 .call-banner p {
@@ -552,28 +584,40 @@ body {
 }
 
 .video-grid {
-  position: relative;
-  aspect-ratio: 16 / 10;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   background: #000;
 }
 
 .video-remote {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
+.video-remote.video-placeholder {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
 .video-local {
   position: absolute;
-  bottom: 1rem;
+  bottom: 5.5rem;
   right: 1rem;
-  width: 160px;
-  height: 120px;
+  width: min(140px, 28vw);
+  height: min(186px, 37vw);
+  max-height: 28vh;
   object-fit: cover;
-  border-radius: 8px;
-  border: 2px solid var(--border);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-  z-index: 2;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  z-index: 5;
   background: #000;
 }
 
@@ -587,13 +631,13 @@ body {
 }
 
 .video-local.video-placeholder {
-  position: absolute;
-  bottom: 1rem;
+  bottom: 5.5rem;
   right: 1rem;
-  width: 160px;
-  height: 120px;
-  border-radius: 8px;
-  z-index: 2;
+  width: min(140px, 28vw);
+  height: min(186px, 37vw);
+  max-height: 28vh;
+  border-radius: 12px;
+  z-index: 5;
 }
 
 .video-hidden {
@@ -609,21 +653,40 @@ body {
   background: var(--surface-2);
 }
 
+.call-controls-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 1.25rem 1rem max(1.25rem, env(safe-area-inset-bottom));
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
+  border: none;
+}
+
 .call-controls button {
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(30, 30, 40, 0.9);
+  color: #fff;
   font-size: 1.25rem;
   cursor: pointer;
 }
 
+.call-controls-overlay button:hover {
+  background: rgba(50, 50, 65, 0.95);
+}
+
 .call-controls .btn-end {
   width: auto;
-  border-radius: 24px;
-  padding: 0 1.25rem;
+  border-radius: 26px;
+  padding: 0 1.5rem;
   font-size: 0.9rem;
+  font-weight: 600;
+  background: var(--danger);
+  border-color: transparent;
 }
 
 @media (max-width: 768px) {

@@ -54,8 +54,32 @@ export function VideoCall({
   const showVideos = call.status === 'active' || call.status === 'calling';
 
   return (
-    <div className="video-call-overlay">
-      <div className="video-call-panel">
+    <div className={`video-call-overlay ${showVideos ? 'video-call-fullscreen' : ''}`}>
+      <div className={`video-call-panel ${showVideos ? 'video-call-panel-fullscreen' : ''}`}>
+        {showVideos && (
+          <div className="video-grid">
+            <video
+              ref={remoteRef}
+              autoPlay
+              playsInline
+              className={`video-remote ${!remoteStream ? 'video-hidden' : ''}`}
+            />
+            {!remoteStream && (
+              <div className="video-remote video-placeholder">Waiting for video…</div>
+            )}
+            <video
+              ref={localRef}
+              autoPlay
+              playsInline
+              muted
+              className={`video-local ${!localStream ? 'video-hidden' : ''}`}
+            />
+            {!localStream && (
+              <div className="video-local video-placeholder">Starting camera…</div>
+            )}
+          </div>
+        )}
+
         {call.status === 'incoming' && (
           <div className="call-banner incoming">
             <p>
@@ -73,7 +97,7 @@ export function VideoCall({
         )}
 
         {call.status === 'calling' && (
-          <div className="call-banner">
+          <div className="call-banner call-banner-overlay">
             <p>
               Calling <strong>{call.remoteUsername}</strong>…
             </p>
@@ -84,27 +108,7 @@ export function VideoCall({
         )}
 
         {showVideos && (
-          <div className="video-grid">
-            <video
-              ref={remoteRef}
-              autoPlay
-              playsInline
-              className={`video-remote ${!remoteStream ? 'video-hidden' : ''}`}
-            />
-            {!remoteStream && <div className="video-remote video-placeholder">Waiting for video…</div>}
-            <video
-              ref={localRef}
-              autoPlay
-              playsInline
-              muted
-              className={`video-local ${!localStream ? 'video-hidden' : ''}`}
-            />
-            {!localStream && <div className="video-local video-placeholder">Starting camera…</div>}
-          </div>
-        )}
-
-        {showVideos && (
-          <div className="call-controls">
+          <div className="call-controls call-controls-overlay">
             <button type="button" onClick={onToggleMute} title={muted ? 'Unmute' : 'Mute'}>
               {muted ? '🔇' : '🎤'}
             </button>
