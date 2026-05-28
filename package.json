@@ -9,9 +9,14 @@
     "install:all": "npm install && npm install --prefix server && npm install --prefix client",
     "build": "npm run build --prefix client",
     "start": "NODE_ENV=production npm run start --prefix server",
-    "prod": "npm run build && npm run start"
+    "prod": "npm run build && npm run start",
+    "deploy:build": "npm run install:all && npm run build",
+    "deploy": "npm run deploy:build && npx pm2 start ecosystem.config.cjs --update-env || npx pm2 restart chatty",
+    "deploy:stop": "npx pm2 stop chatty",
+    "deploy:logs": "npx pm2 logs chatty"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "pm2": "^5.4.3"
   }
 }

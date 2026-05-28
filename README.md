@@ -60,6 +60,18 @@ Video calls use Google’s public STUN server. For production behind strict NATs
 | `npm run build`    | Build client for production    |
 | `npm start`        | Run server only                |
 
+## Deploy to your server
+
+**Full guide:** see [DEPLOY.md](./DEPLOY.md)
+
+**On your VPS (one command):**
+
+```bash
+git clone https://github.com/Vickey9015/chatty.git && cd chatty && bash deploy/setup-vps.sh
+```
+
+**Or manually:** `npm run install:all && npm run deploy` (uses PM2)
+
 ## Hosting (production)
 
 You need **both** a build and the **server running**. The build alone is not enough — chat, uploads, and video signaling all go through the Node server.

@@ -150,7 +150,7 @@ io.on('connection', (socket) => {
 
 if (serveClient) {
   app.use(express.static(clientDist));
-  app.get('*', (_req, res) => {
+  app.get(/^(?!\/api|\/uploads|\/socket\.io).*/, (_req, res) => {
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 }
