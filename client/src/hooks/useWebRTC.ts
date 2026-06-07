@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
-import type { CallState } from '../types';
+import type { CallMode, CallState } from '../types';
 
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
@@ -24,6 +24,7 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const remoteIdRef = useRef<string | null>(null);
   const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
+  const pendingCallModeRef = useRef<CallMode>('video');
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const callStatusRef = useRef<CallState['status']>('idle');
 
@@ -33,6 +34,7 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
     status: 'idle',
     remoteUserId: null,
     remoteUsername: null,
+    mode: null,
   });
   const [muted, setMuted] = useState(false);
   const [videoOff, setVideoOff] = useState(false);
@@ -58,12 +60,13 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
     remoteStreamRef.current = null;
     remoteIdRef.current = null;
     pendingOfferRef.current = null;
+    pendingCallModeRef.current = 'video';
     pendingCandidatesRef.current = [];
     setLocalStream(null);
     setRemote(null);
     setMuted(false);
     setVideoOff(false);
-    updateCall({ status: 'idle', remoteUserId: null, remoteUsername: null });
+    updateCall({ status: 'idle', remoteUserId: null, remoteUsername: null, mode: null });
   }, [setRemote, updateCall]);
 
   const flushPendingCandidates = useCallback(async (peer: RTCPeerConnection) => {
@@ -130,32 +133,42 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
     [socketRef, setRemote],
   );
 
-  const getMedia = useCallback(async () => {
+  const getMedia = useCallback(async (mode: CallMode) => {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user' },
+      video: mode === 'video' ? { facingMode: 'user' } : false,
       audio: true,
     });
     localStreamRef.current = stream;
     setLocalStream(stream);
+    setVideoOff(false);
     return stream;
   }, []);
 
   const startCall = useCallback(
-    async (targetId: string, targetName: string) => {
+    async (targetId: string, targetName: string, mode: CallMode) => {
       try {
         remoteIdRef.current = targetId;
         pendingCandidatesRef.current = [];
         setRemote(null);
-        updateCall({ status: 'calling', remoteUserId: targetId, remoteUsername: targetName });
+        updateCall({
+          status: 'calling',
+          remoteUserId: targetId,
+          remoteUsername: targetName,
+          mode,
+        });
 
-        const stream = await getMedia();
+        const stream = await getMedia(mode);
         const peer = setupPeer(stream);
         const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
-        socketRef.current?.emit('call_user', { targetId, signal: offer });
+        socketRef.current?.emit('call_user', { targetId, signal: offer, callType: mode });
       } catch {
         cleanup();
-        alert('Could not access camera/microphone. Please allow permissions.');
+        alert(
+          mode === 'audio'
+            ? 'Could not access microphone. Please allow permissions.'
+            : 'Could not access camera/microphone. Please allow permissions.',
+        );
       }
     },
     [getMedia, setupPeer, socketRef, cleanup, setRemote, updateCall],
@@ -164,11 +177,12 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
   const acceptCall = useCallback(async () => {
     const remoteId = remoteIdRef.current;
     const offer = pendingOfferRef.current;
+    const mode = pendingCallModeRef.current;
     if (!remoteId || !offer) return;
 
     try {
       setRemote(null);
-      const stream = await getMedia();
+      const stream = await getMedia(mode);
       const peer = setupPeer(stream);
       await peer.setRemoteDescription(new RTCSessionDescription(offer));
       await flushPendingCandidates(peer);
@@ -178,7 +192,11 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
       updateCall((c) => ({ ...c, status: 'active' }));
     } catch {
       cleanup();
-      alert('Could not access camera/microphone.');
+      alert(
+        mode === 'audio'
+          ? 'Could not access microphone.'
+          : 'Could not access camera/microphone.',
+      );
     }
   }, [getMedia, setupPeer, socketRef, cleanup, flushPendingCandidates, setRemote, updateCall]);
 
@@ -204,19 +222,23 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
       from,
       username,
       signal,
+      callType,
     }: {
       from: string;
       username: string;
       signal: RTCSessionDescriptionInit;
+      callType?: CallMode;
     }) => {
       if (callStatusRef.current !== 'idle') {
         socket.emit('end_call', { to: from });
         return;
       }
+      const mode: CallMode = callType === 'audio' ? 'audio' : 'video';
       remoteIdRef.current = from;
       pendingOfferRef.current = signal;
+      pendingCallModeRef.current = mode;
       pendingCandidatesRef.current = [];
-      updateCall({ status: 'incoming', remoteUserId: from, remoteUsername: username });
+      updateCall({ status: 'incoming', remoteUserId: from, remoteUsername: username, mode });
     };
 
     const onAccepted = async ({ signal }: { signal: RTCSessionDescriptionInit }) => {
@@ -258,6 +280,7 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
   };
 
   const toggleVideo = () => {
+    if (call.mode !== 'video') return;
     localStreamRef.current?.getVideoTracks().forEach((t) => {
       t.enabled = !t.enabled;
     });

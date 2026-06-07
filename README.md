@@ -1,6 +1,6 @@
-# ChitChat
+# LockyChat
 
-Real-time chat built with React, Socket.io, and WebRTC. Share photos and videos in chat, and start peer-to-peer video calls with anyone in the same room.
+Secure real-time chat at [lockychat.com](https://lockychat.com). Built with React, Socket.io, and WebRTC. Share photos and videos in chat, and start peer-to-peer video calls with anyone in the same room.
 
 ## Features
 
@@ -36,7 +36,7 @@ lsof -nP -iTCP:5173 -sTCP:LISTEN -t | xargs kill -9
 ## Project structure
 
 ```
-chitchat/
+lockychat/
 ├── client/          # React + Vite frontend
 ├── server/          # Express + Socket.io + file uploads
 └── package.json     # Root scripts (concurrently)
@@ -67,7 +67,7 @@ Video calls use Google’s public STUN server. For production behind strict NATs
 **On your VPS (one command):**
 
 ```bash
-git clone https://github.com/Vickey9015/chatty.git && cd chatty && bash deploy/setup-vps.sh
+git clone https://github.com/Vickey9015/chatty.git lockychat && cd lockychat && bash deploy/setup-vps.sh
 ```
 
 **Or manually:** `npm run install:all && npm run deploy` (uses PM2)
@@ -85,7 +85,7 @@ npm run install:all    # once
 npm run prod           # builds client, then starts server on port 3001
 ```
 
-Open **http://localhost:3001** (or your server’s public URL).
+Open **http://localhost:3001** (or [lockychat.com](https://lockychat.com)).
 
 Or step by step:
 
@@ -97,7 +97,7 @@ npm run start          # serves app + API (set PORT if needed)
 ### Option B — Separate frontend host (Vercel/Netlify + VPS)
 
 1. Deploy the **server** somewhere (Railway, Render, Fly.io, VPS) and set `PORT`.
-2. Build the client with your API URL, e.g. `VITE_SERVER_URL=https://api.example.com npm run build --prefix client`.
+2. Build the client with your API URL, e.g. `VITE_SERVER_URL=https://api.lockychat.com npm run build --prefix client`.
 3. Point the static host at `client/dist`.
 
 For Option B you must set `CLIENT_URL` on the server to your frontend origin(s).
@@ -115,7 +115,7 @@ For Option B you must set `CLIENT_URL` on the server to your frontend origin(s).
 
 ```bash
 # On the server
-git clone <your-repo> && cd chitchat
+git clone <your-repo> lockychat && cd lockychat
 npm run install:all
 npm run prod
 ```

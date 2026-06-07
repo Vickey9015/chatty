@@ -4,16 +4,16 @@ import { ChatRoom } from './components/ChatRoom';
 import './App.css';
 
 function App() {
-  const [session, setSession] = useState<{ username: string; room: string } | null>(null);
+  const [session, setSession] = useState<{ lock: string; key: string } | null>(null);
 
   if (!session) {
-    return <LoginScreen onJoin={(username, room) => setSession({ username, room })} />;
+    return <LoginScreen onJoin={(lock, key) => setSession({ lock, key })} />;
   }
 
   return (
     <ChatRoom
-      username={session.username}
-      room={session.room}
+      lock={session.lock}
+      keySecret={session.key}
       onLeave={() => setSession(null)}
     />
   );

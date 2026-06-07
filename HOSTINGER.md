@@ -1,4 +1,4 @@
-# Deploy on Hostinger (chatty.vickeybuilds.com)
+# Deploy on Hostinger (lockychat.com)
 
 ## hPanel build settings (copy exactly)
 
@@ -40,12 +40,12 @@
 - Entry file must be `index.js`
 - Output directory must be `public`
 - Add `NODE_ENV=production` in environment variables
-- Check **Runtime logs** for `ChitChat server (app + API)`
+- Check **Runtime logs** for `LockyChat server (app + API)`
 
 ### Runtime logs
 
 Open **Runtime logs** in hPanel. A healthy start looks like:
 
 ```
-ChitChat server (app + API) → http://0.0.0.0:XXXX
+LockyChat server (app + API) → http://0.0.0.0:XXXX
 ```

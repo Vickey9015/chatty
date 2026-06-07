@@ -1,6 +1,6 @@
-# Deploy ChitChat to your server
+# Deploy LockyChat to your server
 
-Repo: [github.com/Vickey9015/chatty](https://github.com/Vickey9015/chatty)
+Live site: [lockychat.com](https://lockychat.com)
 
 ## Hostinger Node.js
 
@@ -13,24 +13,24 @@ Quick: Install `npm install` → Build `npm run build` → Start `npm start` →
 SSH into your server, then:
 
 ```bash
-git clone https://github.com/Vickey9015/chatty.git
-cd chatty
+git clone https://github.com/Vickey9015/chatty.git lockychat
+cd lockychat
 chmod +x deploy/setup-vps.sh
 bash deploy/setup-vps.sh
 ```
 
-With a domain (installs nginx):
+With a custom domain (installs nginx):
 
 ```bash
-DOMAIN=chat.yourdomain.com bash deploy/setup-vps.sh
-sudo certbot --nginx -d chat.yourdomain.com
+DOMAIN=lockychat.com bash deploy/setup-vps.sh
+sudo certbot --nginx -d lockychat.com -d www.lockychat.com
 ```
 
 ## Manual steps
 
 ```bash
-git clone https://github.com/Vickey9015/chatty.git
-cd chatty
+git clone https://github.com/Vickey9015/chatty.git lockychat
+cd lockychat
 npm run install:all
 npm run build
 npm run deploy          # starts with PM2
@@ -38,13 +38,13 @@ pm2 save
 pm2 startup             # follow the printed command
 ```
 
-Open **http://YOUR_SERVER_IP:3001** or your domain after nginx + SSL.
+Open **http://YOUR_SERVER_IP:3001** or [lockychat.com](https://lockychat.com) after nginx + SSL.
 
 ## Docker
 
 ```bash
-docker build -t chatty .
-docker run -d -p 3001:3001 -v chatty-uploads:/app/server/uploads --name chatty chatty
+docker build -t lockychat .
+docker run -d -p 3001:3001 -v lockychat-uploads:/app/server/uploads --name lockychat lockychat
 ```
 
 ## Useful commands
@@ -52,21 +52,21 @@ docker run -d -p 3001:3001 -v chatty-uploads:/app/server/uploads --name chatty c
 | Command | Action |
 |---------|--------|
 | `pm2 status` | Check if app is running |
-| `pm2 logs chatty` | View logs |
-| `pm2 restart chatty` | Restart after `git pull` |
+| `pm2 logs lockychat` | View logs |
+| `pm2 restart lockychat` | Restart after `git pull` |
 | `npm run deploy` | Rebuild + restart |
 
 ## After `git pull` on server
 
 ```bash
-cd ~/chatty
+cd ~/lockychat
 git pull
 npm run deploy
 ```
 
 ## HTTPS (required for video calls)
 
-Use nginx + Let's Encrypt — see `deploy/nginx-chatty.conf`.
+Use nginx + Let's Encrypt — see `deploy/nginx-lockychat.conf`.
 
 ## Firewall
 

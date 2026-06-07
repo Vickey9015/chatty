@@ -13,8 +13,11 @@ export interface RoomUser {
   room: string;
 }
 
+export type CallMode = 'video' | 'audio';
+
 export interface CallState {
   status: 'idle' | 'calling' | 'incoming' | 'active';
   remoteUserId: string | null;
   remoteUsername: string | null;
+  mode: CallMode | null;
 }

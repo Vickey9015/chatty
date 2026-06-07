@@ -2,7 +2,7 @@
 module.exports = {
   apps: [
     {
-      name: 'chatty',
+      name: 'lockychat',
       script: 'server/index.js',
       cwd: __dirname,
       instances: 1,

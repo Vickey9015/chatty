@@ -25,7 +25,15 @@ export function MessageList({ messages, currentUser }: Props) {
             className={`message ${isSystem ? 'system' : ''} ${isOwn ? 'own' : ''}`}
           >
             {!isSystem && (
-              <span className="message-author">{isOwn ? 'You' : msg.username}</span>
+              <div className="message-meta">
+                <span className="message-author">{isOwn ? 'You' : msg.username}</span>
+                <time className="message-time">
+                  {new Date(msg.timestamp).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </time>
+              </div>
             )}
             {msg.text && <p className="message-text">{msg.text}</p>}
             {msg.mediaUrl && msg.mediaType === 'image' && (
@@ -33,14 +41,6 @@ export function MessageList({ messages, currentUser }: Props) {
             )}
             {msg.mediaUrl && msg.mediaType === 'video' && (
               <video src={msg.mediaUrl} controls className="message-media" />
-            )}
-            {!isSystem && (
-              <time className="message-time">
-                {new Date(msg.timestamp).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </time>
             )}
           </div>
         );

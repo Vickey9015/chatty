@@ -50,14 +50,10 @@ body {
 }
 
 .logo {
-  font-size: 3rem;
-  margin-bottom: 0.5rem;
-}
-
-.login-card h1 {
-  margin: 0 0 0.25rem;
-  font-size: 2rem;
-  font-weight: 700;
+  display: block;
+  width: min(100%, 150px);
+  height: auto;
+  margin: 0 auto 0.75rem;
 }
 
 .subtitle {
@@ -69,8 +65,100 @@ body {
 .login-card form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
   text-align: left;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.field label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.field-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+.input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: 0.9rem;
+  font-size: 0.95rem;
+  pointer-events: none;
+  opacity: 0.75;
+  z-index: 1;
+}
+
+.input-modern {
+  width: 100%;
+  padding: 0.85rem 1rem 0.85rem 2.65rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #2a2f42 0%, var(--surface-2) 100%);
+  color: var(--text);
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.input-modern-key {
+  padding-right: 2.75rem;
+}
+
+.input-modern::placeholder {
+  color: #6b7289;
+}
+
+.input-modern:hover {
+  border-color: #3d4560;
+}
+
+.input-modern:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.22);
+  background: #2a3044;
+}
+
+.input-toggle {
+  position: absolute;
+  right: 0.65rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  opacity: 0.65;
+  padding: 0.25rem;
+  line-height: 1;
+}
+
+.input-toggle:hover {
+  opacity: 1;
+}
+
+.form-error {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  background: rgba(225, 112, 85, 0.12);
+  border: 1px solid rgba(225, 112, 85, 0.35);
+  color: #ff9f85;
+  font-size: 0.85rem;
 }
 
 .login-card label {
@@ -96,20 +184,34 @@ body {
 }
 
 .btn-primary {
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
   padding: 0.85rem;
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent) 0%, #5a4bd4 100%);
   color: white;
   border: none;
-  border-radius: var(--radius);
+  border-radius: 14px;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: filter 0.2s, transform 0.1s;
+  box-shadow: 0 4px 20px rgba(108, 92, 231, 0.35);
 }
 
-.btn-primary:hover {
-  background: var(--accent-hover);
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn-primary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.btn-unlock {
+  letter-spacing: 0.04em;
 }
 
 /* Chat layout */
@@ -119,20 +221,51 @@ body {
   height: 100vh;
   max-width: 1200px;
   margin: 0 auto;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
 }
 
 .chat-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1.25rem;
+  padding: 0.75rem 1.25rem 0.75rem 0;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
 
+.header-logo {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.header-logo .logo-bg {
+  display: inline-block;
+}
+
+.header-logo-img {
+  display: block;
+  width: 36px;
+  height: auto;
+}
+
+.logo-bg {
+  padding: 0.4rem 0.55rem;
+  background: radial-gradient(ellipse at center, #252b45 0%, var(--surface-2) 70%);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
 .header-actions {
+  flex: 1;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.5rem;
 }
 
@@ -150,11 +283,6 @@ body {
 .btn-users-toggle:hover {
   border-color: var(--accent);
   color: var(--accent);
-}
-
-.chat-header h1 {
-  margin: 0;
-  font-size: 1.25rem;
 }
 
 .status {
@@ -197,9 +325,36 @@ body {
 
 .user-list-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.user-list-lock {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.user-list-lock-name {
+  font-size: 1rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.user-list-lock .status {
+  margin-left: auto;
+  text-align: right;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 500;
 }
 
 .user-list h3 {
@@ -253,105 +408,48 @@ body {
   white-space: nowrap;
 }
 
-.btn-call-small {
+.user-call-actions {
   flex-shrink: 0;
-  padding: 0.35rem 0.55rem;
-  background: var(--accent);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.7rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.btn-call-small:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.btn-call-small:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* Video call bar — always visible in main chat */
-.call-bar {
-  margin: 0.75rem 1.25rem 0;
-  padding: 0.85rem 1rem;
-  background: linear-gradient(135deg, #2d3561 0%, #1e2240 100%);
-  border: 1px solid #3d4a7a;
-  border-radius: var(--radius);
-}
-
-.call-bar-header {
+  margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  gap: 0.15rem;
 }
 
-.call-bar-icon {
-  font-size: 1.25rem;
-}
-
-.call-bar-title {
-  font-weight: 700;
-  font-size: 0.95rem;
-}
-
-.call-bar-count {
-  margin-left: auto;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  background: var(--surface-2);
-  padding: 0.2rem 0.5rem;
-  border-radius: 999px;
-}
-
-.call-bar-hint {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  line-height: 1.45;
-}
-
-.call-bar-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.btn-video-call {
+.btn-call-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.55rem 1rem;
-  background: var(--success);
-  color: white;
+  justify-content: center;
+  background: transparent;
   border: none;
   border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
   cursor: pointer;
-  transition: filter 0.2s, transform 0.1s;
+  color: var(--text-muted);
+  transition: color 0.2s, background 0.2s;
 }
 
-.btn-video-call:hover:not(:disabled) {
-  filter: brightness(1.1);
+.icon-call {
+  width: 16px;
+  height: 16px;
 }
 
-.btn-video-call:active:not(:disabled) {
-  transform: scale(0.98);
+.btn-call-audio:hover:not(:disabled) {
+  color: #74b9ff;
+  background: rgba(116, 185, 255, 0.12);
 }
 
-.btn-video-call:disabled {
-  opacity: 0.5;
+.btn-call-video:hover:not(:disabled) {
+  color: var(--success);
+  background: rgba(0, 184, 148, 0.12);
+}
+
+.btn-call-icon:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
-}
-
-.btn-video-call-icon {
-  font-size: 1rem;
 }
 
 .user-hint {
@@ -401,12 +499,22 @@ body {
   padding: 0.25rem;
 }
 
+.message-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
 .message-author {
-  display: block;
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--accent);
-  margin-bottom: 0.25rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .message.own .message-author {
@@ -428,10 +536,9 @@ body {
 }
 
 .message-time {
-  display: block;
+  flex-shrink: 0;
   font-size: 0.65rem;
   color: var(--text-muted);
-  margin-top: 0.35rem;
   text-align: right;
 }
 
@@ -524,6 +631,33 @@ body {
   border: none;
   border-radius: 0;
   background: #000;
+}
+
+.audio-call-panel {
+  max-width: 360px;
+  text-align: center;
+}
+
+.audio-call-active {
+  padding: 2.5rem 1.5rem 1rem;
+}
+
+.audio-call-avatar {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.audio-call-active p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.audio-call-active strong {
+  color: var(--text);
+}
+
+.audio-call-stream {
+  display: none;
 }
 
 .call-banner {
@@ -721,14 +855,5 @@ body {
 
   .message {
     max-width: 90%;
-  }
-
-  .call-bar-actions {
-    flex-direction: column;
-  }
-
-  .btn-video-call {
-    width: 100%;
-    justify-content: center;
   }
 }

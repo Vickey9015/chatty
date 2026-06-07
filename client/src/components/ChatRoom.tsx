@@ -1,34 +1,55 @@
 import { useState } from 'react';
 import { useSocket } from '../hooks/useSocket';
 import { useWebRTC } from '../hooks/useWebRTC';
-import { CallBar } from './CallBar';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { UserList } from './UserList';
 import { VideoCall } from './VideoCall';
 
 interface Props {
-  username: string;
-  room: string;
+  lock: string;
+  keySecret: string;
   onLeave: () => void;
 }
 
-export function ChatRoom({ username, room, onLeave }: Props) {
-  const { socket, selfId, connected, messages, users, typingUser, sendMessage, setTyping } =
-    useSocket(username, room);
+export function ChatRoom({ lock, keySecret, onLeave }: Props) {
+  const {
+    socket,
+    selfId,
+    username,
+    connected,
+    joinError,
+    messages,
+    users,
+    typingUser,
+    sendMessage,
+    setTyping,
+  } = useSocket(lock, keySecret);
 
   const webrtc = useWebRTC(socket);
   const callActive = webrtc.call.status !== 'idle';
   const [showUsers, setShowUsers] = useState(false);
 
+  if (joinError) {
+    return (
+      <div className="login-screen">
+        <div className="login-card">
+          <p className="form-error">{joinError}</p>
+          <button type="button" className="btn-primary" onClick={onLeave}>
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="chat-app">
       <header className="chat-header">
-        <div>
-          <h1>#{room}</h1>
-          <span className={`status ${connected ? 'online' : 'offline'}`}>
-            {connected ? 'Connected' : 'Reconnecting…'}
-          </span>
+        <div className="header-logo">
+          <div className="logo-bg">
+            <img src="/lockychat-logo.png" alt="LockyChat" className="header-logo-img" />
+          </div>
         </div>
         <div className="header-actions">
           <button
@@ -47,6 +68,8 @@ export function ChatRoom({ username, room, onLeave }: Props) {
 
       <div className="chat-body">
         <UserList
+          lock={lock}
+          connected={connected}
           users={users}
           selfId={selfId}
           onCall={webrtc.startCall}
@@ -63,13 +86,6 @@ export function ChatRoom({ username, room, onLeave }: Props) {
           />
         )}
         <main className="chat-main">
-          <CallBar
-            users={users}
-            selfId={selfId}
-            onCall={webrtc.startCall}
-            callActive={callActive}
-            connected={connected}
-          />
           <MessageList messages={messages} currentUser={username} />
           {typingUser && typingUser !== username && (
             <p className="typing-indicator">{typingUser} is typing…</p>

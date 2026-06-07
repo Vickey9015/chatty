@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Full VPS setup for ChitChat — run on Ubuntu 22.04+ as a user with sudo
+# Full VPS setup for LockyChat — run on Ubuntu 22.04+ as a user with sudo
 # Usage: curl -fsSL ... | bash   OR   bash deploy/setup-vps.sh
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/Vickey9015/chatty.git}"
-APP_DIR="${APP_DIR:-$HOME/chatty}"
+APP_DIR="${APP_DIR:-$HOME/lockychat}"
 BRANCH="${BRANCH:-main}"
-DOMAIN="${DOMAIN:-}"
+DOMAIN="${DOMAIN:-lockychat.com}"
 
-echo "==> ChitChat VPS setup"
+echo "==> LockyChat VPS setup"
 echo "    Repo: $REPO_URL"
 echo "    Dir:  $APP_DIR"
 
@@ -50,7 +50,7 @@ if ! command -v pm2 &>/dev/null; then
 fi
 
 echo "==> Starting app with PM2..."
-pm2 delete chatty 2>/dev/null || true
+pm2 delete lockychat 2>/dev/null || true
 cd "$APP_DIR"
 NODE_ENV=production pm2 start ecosystem.config.cjs
 pm2 save
@@ -64,24 +64,24 @@ if [[ -n "$DOMAIN" ]]; then
   echo "==> Configuring nginx for $DOMAIN..."
   sudo apt-get update -qq
   sudo apt-get install -y nginx
-  sudo sed "s/yourdomain.com/$DOMAIN/g" deploy/nginx-chatty.conf | sudo tee /etc/nginx/sites-available/chatty >/dev/null
-  sudo ln -sf /etc/nginx/sites-available/chatty /etc/nginx/sites-enabled/chatty
+  sudo sed "s/www.lockychat.com/www.$DOMAIN/g; s/lockychat.com/$DOMAIN/g" deploy/nginx-lockychat.conf | sudo tee /etc/nginx/sites-available/lockychat >/dev/null
+  sudo ln -sf /etc/nginx/sites-available/lockychat /etc/nginx/sites-enabled/lockychat
   sudo rm -f /etc/nginx/sites-enabled/default
   sudo nginx -t
   sudo systemctl reload nginx
-  echo "==> Run SSL: sudo certbot --nginx -d $DOMAIN"
+  echo "==> Run SSL: sudo certbot --nginx -d $DOMAIN -d www.$DOMAIN"
 fi
 
 echo ""
 echo "============================================"
-echo "  ChitChat is running on port 3001"
+echo "  LockyChat is running on port 3001"
 echo "  PM2:  pm2 status"
-echo "  Logs: pm2 logs chatty"
+echo "  Logs: pm2 logs lockychat"
 echo ""
 if [[ -n "$DOMAIN" ]]; then
-  echo "  URL:  http://$DOMAIN (add SSL with certbot)"
+  echo "  URL:  https://$DOMAIN (add SSL with certbot)"
 else
   echo "  URL:  http://YOUR_SERVER_IP:3001"
-  echo "  Tip: set DOMAIN=yourdomain.com and re-run for nginx"
+  echo "  Tip: set DOMAIN=lockychat.com and re-run for nginx"
 fi
 echo "============================================"

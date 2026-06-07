@@ -14,13 +14,16 @@ interface Props {
   onToggleVideo: () => void;
 }
 
-function attachStream(video: HTMLVideoElement | null, stream: MediaStream | null) {
-  if (!video) return;
-  if (video.srcObject !== stream) {
-    video.srcObject = stream;
+function attachStream(
+  el: HTMLVideoElement | HTMLAudioElement | null,
+  stream: MediaStream | null,
+) {
+  if (!el) return;
+  if (el.srcObject !== stream) {
+    el.srcObject = stream;
   }
   if (stream) {
-    void video.play().catch(() => {
+    void el.play().catch(() => {
       /* autoplay may need user gesture */
     });
   }
@@ -40,22 +43,30 @@ export function VideoCall({
 }: Props) {
   const localRef = useRef<HTMLVideoElement>(null);
   const remoteRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
+
+  const isVideo = call.mode === 'video';
+  const showVideos = isVideo && (call.status === 'active' || call.status === 'calling');
+  const showAudio = !isVideo && call.status === 'active';
 
   useEffect(() => {
-    attachStream(localRef.current, localStream);
-  }, [localStream, call.status]);
+    if (isVideo) attachStream(localRef.current, localStream);
+  }, [localStream, call.status, isVideo]);
 
   useEffect(() => {
-    attachStream(remoteRef.current, remoteStream);
-  }, [remoteStream, call.status]);
+    if (isVideo) attachStream(remoteRef.current, remoteStream);
+    else attachStream(remoteAudioRef.current, remoteStream);
+  }, [remoteStream, call.status, isVideo]);
 
   if (call.status === 'idle') return null;
 
-  const showVideos = call.status === 'active' || call.status === 'calling';
+  const callLabel = isVideo ? 'Video call' : 'Audio call';
 
   return (
     <div className={`video-call-overlay ${showVideos ? 'video-call-fullscreen' : ''}`}>
-      <div className={`video-call-panel ${showVideos ? 'video-call-panel-fullscreen' : ''}`}>
+      <div
+        className={`video-call-panel ${showVideos ? 'video-call-panel-fullscreen' : ''} ${showAudio ? 'audio-call-panel' : ''}`}
+      >
         {showVideos && (
           <div className="video-grid">
             <video
@@ -80,10 +91,20 @@ export function VideoCall({
           </div>
         )}
 
+        {showAudio && (
+          <div className="audio-call-active">
+            <div className="audio-call-avatar">🎧</div>
+            <p>
+              {callLabel} with <strong>{call.remoteUsername}</strong>
+            </p>
+            <audio ref={remoteAudioRef} autoPlay playsInline className="audio-call-stream" />
+          </div>
+        )}
+
         {call.status === 'incoming' && (
           <div className="call-banner incoming">
             <p>
-              Incoming call from <strong>{call.remoteUsername}</strong>
+              Incoming {callLabel.toLowerCase()} from <strong>{call.remoteUsername}</strong>
             </p>
             <div className="call-actions">
               <button type="button" className="btn-accept" onClick={onAccept}>
@@ -97,9 +118,9 @@ export function VideoCall({
         )}
 
         {call.status === 'calling' && (
-          <div className="call-banner call-banner-overlay">
+          <div className={`call-banner ${isVideo ? 'call-banner-overlay' : 'incoming'}`}>
             <p>
-              Calling <strong>{call.remoteUsername}</strong>…
+              {callLabel} <strong>{call.remoteUsername}</strong>…
             </p>
             <button type="button" className="btn-reject" onClick={onEnd}>
               Cancel
@@ -107,14 +128,16 @@ export function VideoCall({
           </div>
         )}
 
-        {showVideos && (
-          <div className="call-controls call-controls-overlay">
+        {(showVideos || showAudio) && (
+          <div className={`call-controls ${showVideos ? 'call-controls-overlay' : ''}`}>
             <button type="button" onClick={onToggleMute} title={muted ? 'Unmute' : 'Mute'}>
               {muted ? '🔇' : '🎤'}
             </button>
-            <button type="button" onClick={onToggleVideo} title={videoOff ? 'Camera on' : 'Camera off'}>
-              {videoOff ? '📷' : '📹'}
-            </button>
+            {isVideo && (
+              <button type="button" onClick={onToggleVideo} title={videoOff ? 'Camera on' : 'Camera off'}>
+                {videoOff ? '📷' : '📹'}
+              </button>
+            )}
             <button type="button" className="btn-end" onClick={onEnd}>
               End call
             </button>

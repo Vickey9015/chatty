@@ -1,5 +1,5 @@
 {
-  "name": "chitchat",
+  "name": "lockychat",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -19,9 +19,9 @@
     "start": "node index.js",
     "prod": "npm run build && npm run start",
     "deploy:build": "npm run install:all && npm run build",
-    "deploy": "npm run deploy:build && npx pm2 start ecosystem.config.cjs --update-env || npx pm2 restart chatty",
-    "deploy:stop": "npx pm2 stop chatty",
-    "deploy:logs": "npx pm2 logs chatty"
+    "deploy": "npm run deploy:build && npx pm2 start ecosystem.config.cjs --update-env || npx pm2 restart lockychat",
+    "deploy:stop": "npx pm2 stop lockychat",
+    "deploy:logs": "npx pm2 logs lockychat"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -7,6 +7,11 @@ import { fileURLToPath } from 'url';
 import { Server } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
+import dotenv from 'dotenv';
+import { initDb } from './db.js';
+import { unlockLock } from './locks.js';
+
+dotenv.config({ path: path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '.env') });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -75,24 +80,59 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   });
 });
 
+app.post('/api/lock/unlock', async (req, res) => {
+  try {
+    const { lock, key } = req.body ?? {};
+    if (!lock || !key) {
+      return res.status(400).json({ ok: false, error: 'Lock and key are required' });
+    }
+    const result = await unlockLock(String(lock), String(key));
+    if (!result.ok) {
+      const status = result.error?.includes('Invalid key') ? 401 : 400;
+      return res.status(status).json(result);
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Unlock error:', err);
+    res.status(500).json({ ok: false, error: 'Server error' });
+  }
+});
+
 const users = new Map();
 
 io.on('connection', (socket) => {
-  socket.on('join', ({ username, room }) => {
-    const displayName = (username || 'Guest').trim().slice(0, 24) || 'Guest';
-    const chatRoom = (room || 'general').trim().slice(0, 32) || 'general';
+  socket.on('join', async ({ lock, key }) => {
+    try {
+      const result = await unlockLock(String(lock ?? ''), String(key ?? ''));
+      if (!result.ok) {
+        socket.emit('join_error', { error: result.error ?? 'Could not unlock' });
+        return;
+      }
 
-    socket.data.username = displayName;
-    socket.data.room = chatRoom;
+      const displayName = `Mate-${uuidv4().slice(0, 4)}`;
+      const chatRoom = result.lock;
 
-    users.set(socket.id, { id: socket.id, username: displayName, room: chatRoom });
-    socket.join(chatRoom);
+      socket.data.username = displayName;
+      socket.data.room = chatRoom;
+      socket.data.lock = chatRoom;
 
-    const roomUsers = [...users.values()].filter((u) => u.room === chatRoom);
-    io.to(chatRoom).emit('room_users', roomUsers);
-    socket.to(chatRoom).emit('user_joined', { username: displayName });
+      users.set(socket.id, { id: socket.id, username: displayName, room: chatRoom });
+      socket.join(chatRoom);
 
-    socket.emit('joined', { username: displayName, room: chatRoom });
+      const roomUsers = [...users.values()].filter((u) => u.room === chatRoom);
+      io.to(chatRoom).emit('room_users', roomUsers);
+      socket.to(chatRoom).emit('user_joined', { username: displayName });
+
+      socket.emit('joined', {
+        username: displayName,
+        room: chatRoom,
+        lock: chatRoom,
+        created: result.created,
+      });
+    } catch (err) {
+      console.error('Join error:', err);
+      socket.emit('join_error', { error: 'Server error' });
+    }
   });
 
   socket.on('chat_message', (payload) => {
@@ -101,7 +141,7 @@ io.on('connection', (socket) => {
 
     const message = {
       id: uuidv4(),
-      username: username || 'Guest',
+      username: username || 'Mate',
       text: payload.text?.trim() || '',
       mediaUrl: payload.mediaUrl || null,
       mediaType: payload.mediaType || null,
@@ -118,11 +158,12 @@ io.on('connection', (socket) => {
   });
 
   // WebRTC signaling
-  socket.on('call_user', ({ targetId, signal }) => {
+  socket.on('call_user', ({ targetId, signal, callType }) => {
     io.to(targetId).emit('incoming_call', {
       from: socket.id,
       username: socket.data.username,
       signal,
+      callType: callType === 'audio' ? 'audio' : 'video',
     });
   });
 
@@ -172,7 +213,21 @@ httpServer.on('error', (err) => {
   throw err;
 });
 const HOST = process.env.HOST || '0.0.0.0';
-httpServer.listen(PORT, HOST, () => {
-  const mode = serveClient ? 'app + API' : 'API only (run client separately in dev)';
-  console.log(`ChitChat server (${mode}) → http://${HOST}:${PORT}`);
-});
+
+async function start() {
+  try {
+    await initDb();
+    console.log('MySQL ready → lockychat_db');
+  } catch (err) {
+    console.error('Database connection failed:', err.message);
+    console.error('Set DB_HOST, DB_USER, DB_PASSWORD in .env and ensure MySQL is running.');
+    process.exit(1);
+  }
+
+  httpServer.listen(PORT, HOST, () => {
+    const mode = serveClient ? 'app + API' : 'API only (run client separately in dev)';
+    console.log(`LockyChat server (${mode}) → http://${HOST}:${PORT}`);
+  });
+}
+
+start();
