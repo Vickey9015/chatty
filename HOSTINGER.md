@@ -34,20 +34,21 @@
 |------|---------------|--------|
 | `NODE_ENV` | `production` | Required for production |
 | `PORT` | *(leave unset)* | Hostinger injects `PORT` automatically — do **not** override unless support tells you to |
-| `DB_HOST` | `localhost` | Same server as the Node.js app |
+| `DB_HOST` | `localhost` | **Usually** `localhost` when Node.js and MySQL are on the same Hostinger server. If connection fails with `ECONNREFUSED` on `localhost`, try the remote host from **Databases → MySQL** (e.g. `srv1234.hstgr.io`) — see troubleshooting below. |
 | `DB_PORT` | `3306` | Default MySQL port on Hostinger |
-| `DB_USER` | `u123456789_lockychat_db` | MySQL username from hPanel → Databases |
-| `DB_PASSWORD` | `your_mysql_password_here` | MySQL password from hPanel (never commit this) |
-| `DB_NAME` | `u123456789_lockychat_db` | Database name from hPanel → Databases |
+| `DB_USER` | `u123456789_lockychat_db` | **Full** MySQL username from hPanel → Databases (always starts with `u` + account id). Do not use a short name. |
+| `DB_PASSWORD` | `your@password` | MySQL password from hPanel — **no extra quotes** unless hPanel truncates at `@`. See password troubleshooting below. |
+| `DB_NAME` | `u123456789_lockychat_db` | **Full** database name from hPanel → Databases (often the same string as `DB_USER`). |
 
 After all variables are saved: **Redeploy** (or **Restart**), then check **Runtime logs** for `LockyChat server (app + API)`.
 
 ### MySQL on Hostinger
 
 1. In **hPanel → Databases → MySQL Databases**, create a database and user (or use an existing pair).
-2. Note the **database name**, **username**, and **password**. On Hostinger Node.js apps on the same server, use `DB_HOST=localhost` and `DB_PORT=3306`.
-3. Add `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and `DB_NAME` to the Node.js app environment variables. Do **not** commit real passwords to git.
-4. On first start, LockyChat creates the `locks` table automatically. It does **not** run `CREATE DATABASE` when `DB_NAME` is your Hostinger database (only the local default `lockychat_db` is auto-created for dev).
+2. Note the **database name**, **username**, **password**, and (if shown) **MySQL hostname**.
+3. For `DB_HOST`, start with `localhost` and `DB_PORT=3306`. If unlock still fails after fixing credentials, switch `DB_HOST` to the remote hostname from hPanel (e.g. `srv1234.hstgr.io`) and redeploy.
+4. Add all five `DB_*` variables to the Node.js app environment variables in hPanel — **not** a `.env` file on the server. Do **not** commit real passwords to git.
+5. On first start, LockyChat creates the `locks` table automatically. It does **not** run `CREATE DATABASE` when `DB_NAME` is your Hostinger database (only the local default `lockychat_db` is auto-created for dev).
 
 **Note:** The build installs client dev tools (Vite, TypeScript) automatically via `--include=dev`. You do not need a separate install command.
 
@@ -96,7 +97,62 @@ A **503** usually means the Node process is **not listening** on the port Hostin
 8. **Database exists** — in **hPanel → Databases**, confirm the MySQL database and user exist and the user is assigned to that database.
 9. **Redeploy** after changing env vars or code — **Restart** alone may not rebuild `public/`.
 
-**Quick health check (after deploy):** visit `https://lockychat.com/health`. You should see JSON with `"ok": true`, `"ready": true`, and `"db": "ready"`. If `"db": "failed"`, fix MySQL variables above and redeploy.
+**Quick health check (after deploy):** visit `https://lockychat.com/health`. You should see JSON with `"ok": true`, `"ready": true`, and `"db": "ready"`. If `"db": "failed"`, see the next section.
+
+### "Database is temporarily unavailable. Try again shortly."
+
+This message appears when the app is running but MySQL never connected (unlock needs the `locks` table). The server no longer crashes on DB failure — fix credentials and redeploy.
+
+#### `/health` shows correct `database` but `"db": "failed"`
+
+If `GET /health` returns the correct `"database": "u123456789_lockychat_db"` but `"ready": false` and `"db": "failed"`, **`DB_NAME` is being read** — the failure is almost always one of:
+
+| Cause | Typical `mysqlCode` in `/health` | Fix |
+|-------|-------------------------------|-----|
+| Wrong or truncated password | `ER_ACCESS_DENIED_ERROR` (errno 1045) | See password section below |
+| Wrong MySQL hostname | `ECONNREFUSED` | Fix `DB_HOST` (see hostname section) |
+| User not linked to database | `ER_ACCESS_DENIED_ERROR` or `ER_DBACCESS_DENIED_ERROR` | hPanel → Databases → assign user to DB with All privileges |
+| Wrong `DB_USER` | `ER_ACCESS_DENIED_ERROR` | Use full `u…_…` username from hPanel, not a short name |
+
+Use `/health` fields (no password exposed): `mysqlCode`, `mysqlMessage`, `mysqlErrno`, `dbHost`, `dbUser`, `attempts`.
+
+#### MySQL hostname (`DB_HOST`)
+
+1. Open **hPanel → Websites → Databases → MySQL Databases**.
+2. Find your database — the **hostname** may be listed as `localhost` or a remote host like `srv1234.hstgr.io`.
+3. For **Node.js on the same Hostinger server** (Business / Cloud / Node.js hosting), start with `DB_HOST=localhost` and `DB_PORT=3306`.
+4. If `/health` shows `mysqlCode: "ECONNREFUSED"` with `dbHost: "localhost"`, change `DB_HOST` to the remote hostname from hPanel and **Redeploy**.
+5. Do **not** rely on auto-switching to `127.0.0.1` — if `localhost` fails, set the correct host explicitly in hPanel. Some stacks treat `localhost` (socket) vs `127.0.0.1` (TCP) differently; try `127.0.0.1` manually only if Hostinger docs say TCP is required.
+
+#### Password with `@` or special characters
+
+hPanel env parsing is inconsistent. Try in this order:
+
+1. **Plain value, no quotes:** `DB_PASSWORD=your@password` (LockyChat strips accidental surrounding quotes on deploy).
+2. If unlock still fails with `ER_ACCESS_DENIED_ERROR`, hPanel may have truncated at `@` — try wrapping: `"your@password"` (quotes only if plain value fails).
+3. **Definitive test:** in hPanel → Databases, **change the MySQL password** to one **without** `@`, `#`, `$`, or spaces, update `DB_PASSWORD`, **Redeploy**, and retry `/health`.
+4. **phpMyAdmin:** open **Databases → phpMyAdmin**, log in with the same `DB_USER` and password. If phpMyAdmin fails, the Node app will fail too — reset password in hPanel and update env vars.
+
+#### Checklist (in order)
+
+1. **All five `DB_*` vars in hPanel** — not a `.env` file on the server:
+   - `DB_HOST` — `localhost` first (or remote hostname if `ECONNREFUSED`)
+   - `DB_PORT=3306`
+   - `DB_USER` — full name, e.g. `u123456789_lockychat_db`
+   - `DB_PASSWORD` — exact password (see above)
+   - `DB_NAME` — full name, e.g. `u123456789_lockychat_db` (must match the database, not `lockychat_db`)
+2. **phpMyAdmin** — same username/password must work before the app will connect.
+3. **User assigned to database** — in **Databases → MySQL**, confirm the user has **All privileges** on that database.
+4. **Runtime logs** — after redeploy, look for:
+   - `MySQL connect attempt 1/5 → u…@localhost:3306/u…_lockychat_db`
+   - `Database connection failed (attempt N/5): ER_ACCESS_DENIED_ERROR errno=1045 — …` → wrong user/password
+   - `Database connection failed … ECONNREFUSED errno=…` → wrong `DB_HOST`
+   - `Database connection failed … ER_BAD_DB_ERROR` → wrong `DB_NAME`
+   - `MySQL ready → u…_lockychat_db` → fixed
+5. **`/health`** — visit `https://lockychat.com/health`:
+   - `"ready": true`, `"db": "ready"` → fixed
+   - `"db": "failed"` → read `mysqlCode`, `mysqlMessage`, `dbHost`, `dbUser`, `attempts`
+6. **Redeploy** after **any** env var change — save variables, then **Redeploy** (Restart alone may not reload env).
 
 ### Runtime logs
 
@@ -104,4 +160,14 @@ Open **Runtime logs** in hPanel. A healthy start looks like:
 
 ```
 LockyChat server (app + API) → http://0.0.0.0:XXXX
+MySQL connect attempt 1/5 → u123456789_lockychat_db@localhost:3306/u123456789_lockychat_db
+MySQL ready → u123456789_lockychat_db
+```
+
+If MySQL fails, you will also see lines like:
+
+```
+Database connection failed (attempt 5/5): ER_ACCESS_DENIED_ERROR errno=1045 Access denied for user 'u…'@'localhost'
+Database unavailable — server is running but unlock/chat persistence will fail until DB connects.
+Last MySQL error: ER_ACCESS_DENIED_ERROR Access denied for user 'u…'@'localhost'
 ```

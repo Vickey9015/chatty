@@ -201,14 +201,26 @@ const PORT = Number(process.env.PORT) || 3001;
 
 app.get('/health', (_req, res) => {
   const db = getDbStatus();
-  res.json({
-    ok: true,
+  const ready = isDbReady();
+  const body = {
+    ok: ready,
     static: serveClient,
     port: PORT,
     db: db.state,
     database: db.database,
-    ready: isDbReady(),
-  });
+    ready,
+    dbHost: db.host,
+    dbUser: db.user,
+    attempts: db.attempts,
+  };
+
+  if (!ready && db.error) {
+    body.mysqlCode = db.error.code ?? null;
+    body.mysqlMessage = db.error.message ?? null;
+    if (db.error.errno != null) body.mysqlErrno = db.error.errno;
+  }
+
+  res.status(ready ? 200 : 503).json(body);
 });
 
 httpServer.on('error', (err) => {
@@ -230,11 +242,15 @@ async function connectDb() {
     return;
   }
 
+  const { error } = getDbStatus();
   console.error(
     'Database unavailable — server is running but unlock/chat persistence will fail until DB connects.',
   );
+  if (error) {
+    console.error('Last MySQL error:', error.code ?? '(no code)', error.message);
+  }
   console.error(
-    'Check hPanel env vars: DB_HOST=localhost, DB_USER, DB_PASSWORD, DB_NAME (see HOSTINGER.md).',
+    'Check hPanel env vars: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME (see HOSTINGER.md). Visit /health for mysqlCode/mysqlMessage.',
   );
 }
 
