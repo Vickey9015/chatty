@@ -9,14 +9,21 @@ const config = {
   connectionLimit: 10,
 };
 
-const DB_NAME = process.env.DB_NAME || 'lockychat_db';
+const LOCAL_DB_NAME = 'lockychat_db';
+const DB_NAME = process.env.DB_NAME || LOCAL_DB_NAME;
 
 let pool;
 
 export async function initDb() {
-  const bootstrap = await mysql.createConnection(config);
-  await bootstrap.query(`CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-  await bootstrap.end();
+  // Hostinger (and most shared hosts) provide an existing DB — users cannot CREATE DATABASE.
+  // Only bootstrap the default local database name for dev.
+  if (DB_NAME === LOCAL_DB_NAME) {
+    const bootstrap = await mysql.createConnection(config);
+    await bootstrap.query(
+      `CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+    );
+    await bootstrap.end();
+  }
 
   pool = mysql.createPool({ ...config, database: DB_NAME });
 

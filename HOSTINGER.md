@@ -15,9 +15,24 @@
 
 ## Environment variables
 
+Set these in **hPanel → Node.js app → Environment variables** (same names as in `.env.example`):
+
 | Variable | Value |
 |----------|--------|
 | `NODE_ENV` | `production` |
+| `PORT` | `3001` (or the port Hostinger assigns) |
+| `DB_HOST` | `localhost` |
+| `DB_PORT` | `3306` |
+| `DB_USER` | Your MySQL user from hPanel (e.g. `u123456789_lockychat_db`) |
+| `DB_PASSWORD` | Your MySQL password from hPanel |
+| `DB_NAME` | Your MySQL database name from hPanel (e.g. `u123456789_lockychat_db`) |
+
+### MySQL on Hostinger
+
+1. In **hPanel → Databases → MySQL Databases**, create a database and user (or use an existing pair).
+2. Note the **database name**, **username**, and **password**. On Hostinger Node.js apps on the same server, use `DB_HOST=localhost` and `DB_PORT=3306`.
+3. Add `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and `DB_NAME` to the Node.js app environment variables. Do **not** commit real passwords to git.
+4. On first start, LockyChat creates the `locks` table automatically. It does **not** run `CREATE DATABASE` when `DB_NAME` is your Hostinger database (only the local default `lockychat_db` is auto-created for dev).
 
 **Note:** The build installs client dev tools (Vite, TypeScript) automatically via `--include=dev`. You do not need a separate install command.
 
