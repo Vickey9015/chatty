@@ -34,7 +34,7 @@
 |------|---------------|--------|
 | `NODE_ENV` | `production` | Required for production |
 | `PORT` | *(leave unset)* | Hostinger injects `PORT` automatically — do **not** override unless support tells you to |
-| `DB_HOST` | `localhost` | **Usually** `localhost` when Node.js and MySQL are on the same Hostinger server. If connection fails with `ECONNREFUSED` on `localhost`, try the remote host from **Databases → MySQL** (e.g. `srv1234.hstgr.io`) — see troubleshooting below. |
+| `DB_HOST` | `127.0.0.1` | Use **`127.0.0.1`** (not `localhost`) — Node resolves `localhost` to IPv6 `::1`, which often causes `ER_ACCESS_DENIED_ERROR` on Hostinger. The app also auto-maps `localhost` → `127.0.0.1`. If connection still fails, try the remote host from **Databases → MySQL** (e.g. `srv1234.hstgr.io`). |
 | `DB_PORT` | `3306` | Default MySQL port on Hostinger |
 | `DB_USER` | `u123456789_lockychat_db` | **Full** MySQL username from hPanel → Databases (always starts with `u` + account id). Do not use a short name. |
 | `DB_PASSWORD` | `your@password` | MySQL password from hPanel — **no extra quotes** unless hPanel truncates at `@`. See password troubleshooting below. |
@@ -46,7 +46,7 @@ After all variables are saved: **Redeploy** (or **Restart**), then check **Runti
 
 1. In **hPanel → Databases → MySQL Databases**, create a database and user (or use an existing pair).
 2. Note the **database name**, **username**, **password**, and (if shown) **MySQL hostname**.
-3. For `DB_HOST`, start with `localhost` and `DB_PORT=3306`. If unlock still fails after fixing credentials, switch `DB_HOST` to the remote hostname from hPanel (e.g. `srv1234.hstgr.io`) and redeploy.
+3. For `DB_HOST`, use **`127.0.0.1`** (recommended) or `localhost` (the app maps `localhost` → `127.0.0.1`). If unlock still fails, try the remote hostname from hPanel (e.g. `srv1234.hstgr.io`) and redeploy.
 4. Add all five `DB_*` variables to the Node.js app environment variables in hPanel — **not** a `.env` file on the server. Do **not** commit real passwords to git.
 5. On first start, LockyChat creates the `locks` table automatically. It does **not** run `CREATE DATABASE` when `DB_NAME` is your Hostinger database (only the local default `lockychat_db` is auto-created for dev).
 
@@ -120,9 +120,9 @@ Use `/health` fields (no password exposed): `mysqlCode`, `mysqlMessage`, `mysqlE
 
 1. Open **hPanel → Websites → Databases → MySQL Databases**.
 2. Find your database — the **hostname** may be listed as `localhost` or a remote host like `srv1234.hstgr.io`.
-3. For **Node.js on the same Hostinger server** (Business / Cloud / Node.js hosting), start with `DB_HOST=localhost` and `DB_PORT=3306`.
-4. If `/health` shows `mysqlCode: "ECONNREFUSED"` with `dbHost: "localhost"`, change `DB_HOST` to the remote hostname from hPanel and **Redeploy**.
-5. Do **not** rely on auto-switching to `127.0.0.1` — if `localhost` fails, set the correct host explicitly in hPanel. Some stacks treat `localhost` (socket) vs `127.0.0.1` (TCP) differently; try `127.0.0.1` manually only if Hostinger docs say TCP is required.
+3. For **Node.js on the same Hostinger server**, use `DB_HOST=127.0.0.1` and `DB_PORT=3306`.
+4. If `/health` shows `mysqlMessage` with **`@'::1'`** — Node connected via IPv6; set `DB_HOST=127.0.0.1` in hPanel and redeploy (the app also auto-maps `localhost` → `127.0.0.1`).
+5. If `/health` shows `mysqlCode: "ECONNREFUSED"`, change `DB_HOST` to the remote hostname from hPanel and **Redeploy**.
 
 #### Password with `@` or special characters
 
@@ -136,7 +136,7 @@ hPanel env parsing is inconsistent. Try in this order:
 #### Checklist (in order)
 
 1. **All five `DB_*` vars in hPanel** — not a `.env` file on the server:
-   - `DB_HOST` — `localhost` first (or remote hostname if `ECONNREFUSED`)
+   - `DB_HOST` — `127.0.0.1` (or remote hostname if `ECONNREFUSED`)
    - `DB_PORT=3306`
    - `DB_USER` — full name, e.g. `u123456789_lockychat_db`
    - `DB_PASSWORD` — exact password (see above)

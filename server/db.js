@@ -14,8 +14,15 @@ export function sanitizeEnv(value) {
 }
 
 function readDbConfig() {
+  let host = sanitizeEnv(process.env.DB_HOST) || 'localhost';
+  // Node resolves "localhost" to ::1 (IPv6); Hostinger MySQL users are often
+  // granted for 127.0.0.1/localhost socket only — ::1 gets ER_ACCESS_DENIED.
+  if (host === 'localhost') {
+    host = '127.0.0.1';
+  }
+
   return {
-    host: sanitizeEnv(process.env.DB_HOST) || 'localhost',
+    host,
     port: Number(sanitizeEnv(process.env.DB_PORT)) || 3306,
     user: sanitizeEnv(process.env.DB_USER) || 'root',
     password: sanitizeEnv(process.env.DB_PASSWORD) || '',
