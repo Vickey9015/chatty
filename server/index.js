@@ -8,7 +8,7 @@ import { Server } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import dotenv from 'dotenv';
-import { initDb } from './db.js';
+import { getDbStatus, initDbWithRetry, isDbReady } from './db.js';
 import { unlockLock } from './locks.js';
 
 dotenv.config({ path: path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '.env') });
@@ -200,7 +200,15 @@ if (serveClient && staticDir) {
 const PORT = Number(process.env.PORT) || 3001;
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, static: serveClient, port: PORT });
+  const db = getDbStatus();
+  res.json({
+    ok: true,
+    static: serveClient,
+    port: PORT,
+    db: db.state,
+    database: db.database,
+    ready: isDbReady(),
+  });
 });
 
 httpServer.on('error', (err) => {
@@ -214,19 +222,27 @@ httpServer.on('error', (err) => {
 });
 const HOST = process.env.HOST || '0.0.0.0';
 
-async function start() {
-  try {
-    await initDb();
-    console.log('MySQL ready → lockychat_db');
-  } catch (err) {
-    console.error('Database connection failed:', err.message);
-    console.error('Set DB_HOST, DB_USER, DB_PASSWORD in .env and ensure MySQL is running.');
-    process.exit(1);
+async function connectDb() {
+  const connected = await initDbWithRetry();
+  if (connected) {
+    const { database } = getDbStatus();
+    console.log(`MySQL ready → ${database}`);
+    return;
   }
 
+  console.error(
+    'Database unavailable — server is running but unlock/chat persistence will fail until DB connects.',
+  );
+  console.error(
+    'Check hPanel env vars: DB_HOST=localhost, DB_USER, DB_PASSWORD, DB_NAME (see HOSTINGER.md).',
+  );
+}
+
+function start() {
   httpServer.listen(PORT, HOST, () => {
     const mode = serveClient ? 'app + API' : 'API only (run client separately in dev)';
     console.log(`LockyChat server (${mode}) → http://${HOST}:${PORT}`);
+    void connectDb();
   });
 }
 

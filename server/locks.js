@@ -34,7 +34,13 @@ export async function unlockLock(lockRaw, keyRaw) {
   const keyErr = validateKey(key);
   if (keyErr) return { ok: false, error: keyErr };
 
-  const pool = getPool();
+  let pool;
+  try {
+    pool = getPool();
+  } catch {
+    return { ok: false, error: 'Database is temporarily unavailable. Try again shortly.' };
+  }
+
   const [rows] = await pool.query('SELECT id, key_hash FROM locks WHERE lock_name = ?', [lock]);
 
   if (rows.length === 0) {
