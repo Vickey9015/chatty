@@ -78,8 +78,16 @@ export function MessageInput({ onSend, onTyping, disabled }: Props) {
         }}
         disabled={disabled || uploading}
       />
-      <button type="submit" className="btn-send" disabled={disabled || !text.trim() || uploading}>
-        Send
+      <button
+        type="submit"
+        className="btn-send"
+        disabled={disabled || !text.trim() || uploading}
+        aria-label="Send message"
+      >
+        <span className="btn-send-label">Send</span>
+        <span className="btn-send-icon" aria-hidden="true">
+          ➤
+        </span>
       </button>
     </form>
   );

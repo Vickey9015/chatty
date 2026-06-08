@@ -58,13 +58,20 @@ export function ChatRoom({ lock, keySecret, onLeave }: Props) {
             onClick={() => setShowUsers((v) => !v)}
             aria-expanded={showUsers}
           >
-            👥 Online ({users.length})
+            👥 <span className="users-label-long">Online </span>({users.length})
           </button>
           <button type="button" className="btn-leave" onClick={onLeave}>
             Leave
           </button>
         </div>
       </header>
+
+      <div className="mobile-lock-bar" aria-label="Current lock">
+        <span className="mobile-lock-name">🔒 {lock}</span>
+        <span className={`status ${connected ? 'online' : 'offline'}`}>
+          {connected ? 'Connected' : 'Reconnecting…'}
+        </span>
+      </div>
 
       <div className="chat-body">
         <UserList
