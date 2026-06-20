@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import { unlockAppAudio } from '../lib/audioUnlock';
 import { getIceServers } from '../lib/iceServers';
+import { toSessionDescription, waitForRelayCandidates } from '../lib/iceGathering';
 import { mergeRemoteTrack, serializeIceCandidate, snapshotStream } from '../lib/webrtcUtils';
 import type { CallMode, CallState } from '../types';
 
@@ -117,10 +118,19 @@ export function useWebRTC(
         }
       };
 
+      peer.oniceconnectionstatechange = () => {
+        if (peer.iceConnectionState === 'failed') {
+          alert(
+            'Call connection failed. Same-WiFi calls need TURN relay — try mobile data on one device, or redeploy after the latest update.',
+          );
+          cleanup();
+        }
+      };
+
       peerRef.current = peer;
       return peer;
     },
-    [socketRef, setRemote],
+    [socketRef, setRemote, cleanup],
   );
 
   const getMedia = useCallback(async (mode: CallMode, facing: 'user' | 'environment' = facingModeRef.current) => {
@@ -158,13 +168,24 @@ export function useWebRTC(
         const peer = setupPeer(stream);
         const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
-        socketRef.current?.emit('call_user', { targetId, signal: offer, callType: mode });
-      } catch {
+        const hasRelay = await waitForRelayCandidates(peer);
+        const signal = toSessionDescription(peer.localDescription);
+        if (!signal) throw new Error('Failed to create offer');
+        if (!hasRelay) {
+          throw new Error('Could not reach TURN relay server. Check your network or try mobile data.');
+        }
+        socketRef.current?.emit('call_user', { targetId, signal, callType: mode });
+      } catch (err) {
         cleanup();
+        const relayMsg =
+          err instanceof Error && err.message.includes('TURN')
+            ? err.message
+            : null;
         alert(
-          mode === 'audio'
-            ? 'Could not access microphone. Please allow permissions.'
-            : 'Could not access camera/microphone. Please allow permissions.',
+          relayMsg ??
+            (mode === 'audio'
+              ? 'Could not access microphone. Please allow permissions.'
+              : 'Could not access camera/microphone. Please allow permissions.'),
         );
       }
     },
@@ -186,14 +207,25 @@ export function useWebRTC(
       await flushPendingCandidates(peer);
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
-      socketRef.current?.emit('answer_call', { to: remoteId, signal: answer });
+      const hasRelay = await waitForRelayCandidates(peer);
+      const signal = toSessionDescription(peer.localDescription);
+      if (!signal) throw new Error('Failed to create answer');
+      if (!hasRelay) {
+        throw new Error('Could not reach TURN relay server. Check your network or try mobile data.');
+      }
+      socketRef.current?.emit('answer_call', { to: remoteId, signal });
       updateCall((c) => ({ ...c, status: 'active' }));
-    } catch {
+    } catch (err) {
       cleanup();
+      const relayMsg =
+        err instanceof Error && err.message.includes('TURN')
+          ? err.message
+          : null;
       alert(
-        mode === 'audio'
-          ? 'Could not access microphone.'
-          : 'Could not access camera/microphone.',
+        relayMsg ??
+          (mode === 'audio'
+            ? 'Could not access microphone.'
+            : 'Could not access camera/microphone.'),
       );
     }
   }, [getMedia, setupPeer, socketRef, cleanup, flushPendingCandidates, setRemote, updateCall]);

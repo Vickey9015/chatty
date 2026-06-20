@@ -40,6 +40,9 @@ const io = new Server(httpServer, {
     origin: serveClient ? true : allowedOrigins,
     methods: ['GET', 'POST'],
   },
+  maxHttpBufferSize: 5e6,
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 app.use(

@@ -37,7 +37,10 @@ export function getIceServers(): RTCConfiguration {
 
   return {
     iceServers: servers,
-    iceCandidatePoolSize: 0,
+    // Same WiFi (laptop + phone) fails on direct/host paths due to NAT hairpin;
+    // relay via TURN routes both sides through the internet and always works.
+    iceTransportPolicy: 'relay',
+    iceCandidatePoolSize: 4,
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require',
   };
