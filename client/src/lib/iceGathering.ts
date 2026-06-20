@@ -5,10 +5,36 @@ export function sdpHasRelayCandidates(sdp: string | undefined | null): boolean {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/** Wait until relay candidates are in the SDP (required for same-WiFi laptop + phone). */
+export function waitForIceGatheringComplete(
+  peer: RTCPeerConnection,
+  timeoutMs = 10000,
+): Promise<void> {
+  if (peer.iceGatheringState === 'complete') {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const finish = () => {
+      peer.removeEventListener('icegatheringstatechange', onChange);
+      clearTimeout(timer);
+      resolve();
+    };
+
+    const onChange = () => {
+      if (peer.iceGatheringState === 'complete') {
+        finish();
+      }
+    };
+
+    peer.addEventListener('icegatheringstatechange', onChange);
+    const timer = setTimeout(finish, timeoutMs);
+  });
+}
+
+/** Wait until relay candidates are in the SDP (same-WiFi calls). */
 export async function waitForRelayCandidates(
   peer: RTCPeerConnection,
-  timeoutMs = 18000,
+  timeoutMs = 20000,
 ): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
 

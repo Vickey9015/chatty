@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import { unlockAppAudio } from '../lib/audioUnlock';
-import { getIceServers } from '../lib/iceServers';
-import { toSessionDescription, waitForRelayCandidates } from '../lib/iceGathering';
+import { fetchIceConfig, toRtcConfiguration, type IceConfig } from '../lib/iceServers';
+import {
+  toSessionDescription,
+  waitForIceGatheringComplete,
+  waitForRelayCandidates,
+} from '../lib/iceGathering';
 import { mergeRemoteTrack, serializeIceCandidate, snapshotStream } from '../lib/webrtcUtils';
 import type { CallMode, CallState } from '../types';
 
@@ -17,6 +21,7 @@ export function useWebRTC(
   const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
   const pendingCallModeRef = useRef<CallMode>('video');
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const iceConfigRef = useRef<IceConfig | null>(null);
   const callStatusRef = useRef<CallState['status']>('idle');
 
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -56,6 +61,7 @@ export function useWebRTC(
     pendingOfferRef.current = null;
     pendingCallModeRef.current = 'video';
     pendingCandidatesRef.current = [];
+    iceConfigRef.current = null;
     setLocalStream(null);
     setRemote(null);
     setOfferReady(false);
@@ -96,8 +102,8 @@ export function useWebRTC(
   }, []);
 
   const setupPeer = useCallback(
-    (stream: MediaStream) => {
-      const peer = new RTCPeerConnection(getIceServers());
+    (stream: MediaStream, iceConfig: IceConfig) => {
+      const peer = new RTCPeerConnection(toRtcConfiguration(iceConfig));
 
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
@@ -120,8 +126,11 @@ export function useWebRTC(
 
       peer.oniceconnectionstatechange = () => {
         if (peer.iceConnectionState === 'failed') {
+          const needsTurn = iceConfigRef.current?.iceTransportPolicy === 'all';
           alert(
-            'Call connection failed. Same-WiFi calls need TURN relay — try mobile data on one device, or redeploy after the latest update.',
+            needsTurn
+              ? 'Call failed on this network. For same-WiFi calls, add a free Metered TURN API key in Hostinger (see .env.example). Or try mobile data on one device.'
+              : 'Call connection failed. Try again or use mobile data on one device.',
           );
           cleanup();
         }
@@ -146,6 +155,29 @@ export function useWebRTC(
     return stream;
   }, []);
 
+  const finalizeLocalDescription = useCallback(
+    async (peer: RTCPeerConnection, desc: RTCSessionDescriptionInit) => {
+      await peer.setLocalDescription(desc);
+      const policy = iceConfigRef.current?.iceTransportPolicy ?? 'all';
+
+      if (policy === 'relay') {
+        const hasRelay = await waitForRelayCandidates(peer);
+        if (!hasRelay) {
+          throw new Error(
+            'TURN relay unavailable. Add METERED_TURN_API_KEY in Hostinger env vars (free at dashboard.metered.ca).',
+          );
+        }
+      } else {
+        await waitForIceGatheringComplete(peer);
+      }
+
+      const signal = toSessionDescription(peer.localDescription);
+      if (!signal) throw new Error('Failed to create session description');
+      return signal;
+    },
+    [],
+  );
+
   const startCall = useCallback(
     async (targetId: string, targetName: string, mode: CallMode) => {
       try {
@@ -164,23 +196,18 @@ export function useWebRTC(
         // Ring the other person immediately — don't wait for camera/mic.
         socketRef.current?.emit('call_ring', { targetId, callType: mode });
 
+        const iceConfig = await fetchIceConfig();
+        iceConfigRef.current = iceConfig;
+
         const stream = await getMedia(mode);
-        const peer = setupPeer(stream);
+        const peer = setupPeer(stream, iceConfig);
         const offer = await peer.createOffer();
-        await peer.setLocalDescription(offer);
-        const hasRelay = await waitForRelayCandidates(peer);
-        const signal = toSessionDescription(peer.localDescription);
-        if (!signal) throw new Error('Failed to create offer');
-        if (!hasRelay) {
-          throw new Error('Could not reach TURN relay server. Check your network or try mobile data.');
-        }
+        const signal = await finalizeLocalDescription(peer, offer);
         socketRef.current?.emit('call_user', { targetId, signal, callType: mode });
       } catch (err) {
         cleanup();
-        const relayMsg =
-          err instanceof Error && err.message.includes('TURN')
-            ? err.message
-            : null;
+        const msg = err instanceof Error ? err.message : null;
+        const relayMsg = msg?.includes('TURN') || msg?.includes('Metered') ? msg : null;
         alert(
           relayMsg ??
             (mode === 'audio'
@@ -189,7 +216,7 @@ export function useWebRTC(
         );
       }
     },
-    [getMedia, setupPeer, socketRef, cleanup, setRemote, updateCall],
+    [getMedia, setupPeer, socketRef, cleanup, setRemote, updateCall, finalizeLocalDescription],
   );
 
   const acceptCall = useCallback(async () => {
@@ -201,26 +228,21 @@ export function useWebRTC(
     try {
       unlockAppAudio();
       setRemote(null);
+      const iceConfig = iceConfigRef.current ?? (await fetchIceConfig());
+      iceConfigRef.current = iceConfig;
+
       const stream = await getMedia(mode);
-      const peer = setupPeer(stream);
+      const peer = setupPeer(stream, iceConfig);
       await peer.setRemoteDescription(new RTCSessionDescription(offer));
       await flushPendingCandidates(peer);
       const answer = await peer.createAnswer();
-      await peer.setLocalDescription(answer);
-      const hasRelay = await waitForRelayCandidates(peer);
-      const signal = toSessionDescription(peer.localDescription);
-      if (!signal) throw new Error('Failed to create answer');
-      if (!hasRelay) {
-        throw new Error('Could not reach TURN relay server. Check your network or try mobile data.');
-      }
+      const signal = await finalizeLocalDescription(peer, answer);
       socketRef.current?.emit('answer_call', { to: remoteId, signal });
       updateCall((c) => ({ ...c, status: 'active' }));
     } catch (err) {
       cleanup();
-      const relayMsg =
-        err instanceof Error && err.message.includes('TURN')
-          ? err.message
-          : null;
+      const msg = err instanceof Error ? err.message : null;
+      const relayMsg = msg?.includes('TURN') || msg?.includes('Metered') ? msg : null;
       alert(
         relayMsg ??
           (mode === 'audio'
@@ -228,7 +250,7 @@ export function useWebRTC(
             : 'Could not access camera/microphone.'),
       );
     }
-  }, [getMedia, setupPeer, socketRef, cleanup, flushPendingCandidates, setRemote, updateCall]);
+  }, [getMedia, setupPeer, socketRef, cleanup, flushPendingCandidates, setRemote, updateCall, finalizeLocalDescription]);
 
   const rejectCall = useCallback(() => {
     if (remoteIdRef.current) {
@@ -268,6 +290,10 @@ export function useWebRTC(
       remoteIdRef.current = from;
       pendingCallModeRef.current = mode;
       pendingCandidatesRef.current = [];
+      iceConfigRef.current = null;
+      void fetchIceConfig().then((cfg) => {
+        iceConfigRef.current = cfg;
+      });
       if (signal?.type && signal?.sdp) {
         pendingOfferRef.current = signal;
         setOfferReady(true);

@@ -10,6 +10,7 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import { getDbStatus, initDbWithRetry, isDbReady } from './db.js';
 import { unlockLock } from './locks.js';
+import { getTurnCredentials } from './turn.js';
 
 dotenv.config({ path: path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '.env') });
 
@@ -101,6 +102,16 @@ app.post('/api/lock/unlock', async (req, res) => {
   } catch (err) {
     console.error('Unlock error:', err);
     res.status(500).json({ ok: false, error: 'Server error' });
+  }
+});
+
+app.get('/api/turn-credentials', async (_req, res) => {
+  try {
+    const config = await getTurnCredentials();
+    res.json(config);
+  } catch (err) {
+    console.error('TURN credentials error:', err);
+    res.status(500).json({ error: 'Could not load TURN credentials' });
   }
 });
 

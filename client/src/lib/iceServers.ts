@@ -1,47 +1,51 @@
-/** STUN + TURN — WiFi/home routers often block direct P2P; TURN relays media through the internet. */
-export function getIceServers(): RTCConfiguration {
-  const servers: RTCIceServer[] = [
+export interface IceConfig {
+  iceServers: RTCIceServer[];
+  iceTransportPolicy?: RTCIceTransportPolicy;
+  source?: string;
+}
+
+const RTC_OPTIONS: Omit<RTCConfiguration, 'iceServers' | 'iceTransportPolicy'> = {
+  iceCandidatePoolSize: 4,
+  bundlePolicy: 'max-bundle',
+  rtcpMuxPolicy: 'require',
+};
+
+const STATIC_FALLBACK: IceConfig = {
+  iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-  ];
+    {
+      urls: [
+        'turn:openrelay.metered.ca:443?transport=tcp',
+        'turns:openrelay.metered.ca:443',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+  ],
+  iceTransportPolicy: 'all',
+  source: 'static',
+};
 
-  if (
-    import.meta.env.VITE_TURN_URL &&
-    import.meta.env.VITE_TURN_USERNAME &&
-    import.meta.env.VITE_TURN_CREDENTIAL
-  ) {
-    servers.push({
-      urls: import.meta.env.VITE_TURN_URL,
-      username: import.meta.env.VITE_TURN_USERNAME,
-      credential: import.meta.env.VITE_TURN_CREDENTIAL,
-    });
-  } else {
-    servers.push(
-      {
-        urls: [
-          'turn:openrelay.metered.ca:80',
-          'turn:openrelay.metered.ca:443',
-          'turn:openrelay.metered.ca:443?transport=tcp',
-          'turns:openrelay.metered.ca:443',
-        ],
-        username: 'openrelayproject',
-        credential: 'openrelayproject',
-      },
-      {
-        urls: 'turn:numb.viagenie.ca',
-        username: 'webrtc@live.com',
-        credential: 'muazkh',
-      },
-    );
-  }
-
+export function toRtcConfiguration(config: IceConfig): RTCConfiguration {
   return {
-    iceServers: servers,
-    // Same WiFi (laptop + phone) fails on direct/host paths due to NAT hairpin;
-    // relay via TURN routes both sides through the internet and always works.
-    iceTransportPolicy: 'relay',
-    iceCandidatePoolSize: 4,
-    bundlePolicy: 'max-bundle',
-    rtcpMuxPolicy: 'require',
+    ...RTC_OPTIONS,
+    iceServers: config.iceServers,
+    iceTransportPolicy: config.iceTransportPolicy ?? 'all',
   };
+}
+
+/** Load ICE servers from the backend (Metered API when configured). */
+export async function fetchIceConfig(): Promise<IceConfig> {
+  try {
+    const res = await fetch('/api/turn-credentials', { credentials: 'same-origin' });
+    if (!res.ok) throw new Error(String(res.status));
+    const data = (await res.json()) as IceConfig;
+    if (!Array.isArray(data.iceServers) || data.iceServers.length === 0) {
+      throw new Error('empty iceServers');
+    }
+    return data;
+  } catch {
+    return STATIC_FALLBACK;
+  }
 }
