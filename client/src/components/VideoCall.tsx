@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useCallRingtone } from '../hooks/useCallRingtone';
 import type { CallState } from '../types';
 
 interface Props {
@@ -7,11 +8,13 @@ interface Props {
   remoteStream: MediaStream | null;
   muted: boolean;
   videoOff: boolean;
+  facingMode: 'user' | 'environment';
   onAccept: () => void;
   onReject: () => void;
   onEnd: () => void;
   onToggleMute: () => void;
   onToggleVideo: () => void;
+  onSwitchCamera: () => void;
 }
 
 function attachStream(
@@ -19,14 +22,27 @@ function attachStream(
   stream: MediaStream | null,
 ) {
   if (!el) return;
-  if (el.srcObject !== stream) {
-    el.srcObject = stream;
-  }
-  if (stream) {
+
+  const play = () => {
     void el.play().catch(() => {
       /* autoplay may need user gesture */
     });
+  };
+
+  if (!stream) {
+    if (el.srcObject) {
+      el.srcObject = null;
+    }
+    return;
   }
+
+  if (el.srcObject !== stream) {
+    el.srcObject = stream;
+  }
+
+  play();
+  stream.onaddtrack = play;
+  stream.onremovetrack = play;
 }
 
 export function VideoCall({
@@ -35,11 +51,13 @@ export function VideoCall({
   remoteStream,
   muted,
   videoOff,
+  facingMode,
   onAccept,
   onReject,
   onEnd,
   onToggleMute,
   onToggleVideo,
+  onSwitchCamera,
 }: Props) {
   const localRef = useRef<HTMLVideoElement>(null);
   const remoteRef = useRef<HTMLVideoElement>(null);
@@ -48,15 +66,25 @@ export function VideoCall({
   const isVideo = call.mode === 'video';
   const showVideos = isVideo && (call.status === 'active' || call.status === 'calling');
   const showAudio = !isVideo && call.status === 'active';
+  const hasRemoteVideo = Boolean(
+    remoteStream?.getVideoTracks().some((track) => track.readyState === 'live'),
+  );
+  const hasLocalVideo = Boolean(
+    localStream?.getVideoTracks().some((track) => track.readyState === 'live'),
+  );
+
+  const isRinging = call.status === 'incoming' || call.status === 'calling';
+  useCallRingtone(isRinging);
 
   useEffect(() => {
-    if (isVideo) attachStream(localRef.current, localStream);
-  }, [localStream, call.status, isVideo]);
+    if (showVideos) attachStream(localRef.current, localStream);
+  }, [localStream, showVideos]);
 
   useEffect(() => {
+    if (!showVideos && !showAudio) return;
     if (isVideo) attachStream(remoteRef.current, remoteStream);
     else attachStream(remoteAudioRef.current, remoteStream);
-  }, [remoteStream, call.status, isVideo]);
+  }, [remoteStream, showVideos, showAudio, isVideo]);
 
   if (call.status === 'idle') return null;
 
@@ -73,9 +101,9 @@ export function VideoCall({
               ref={remoteRef}
               autoPlay
               playsInline
-              className={`video-remote ${!remoteStream ? 'video-hidden' : ''}`}
+              className={`video-remote ${!hasRemoteVideo ? 'video-hidden' : ''}`}
             />
-            {!remoteStream && (
+            {!hasRemoteVideo && (
               <div className="video-remote video-placeholder">Waiting for video…</div>
             )}
             <video
@@ -83,9 +111,9 @@ export function VideoCall({
               autoPlay
               playsInline
               muted
-              className={`video-local ${!localStream ? 'video-hidden' : ''}`}
+              className={`video-local ${!hasLocalVideo ? 'video-hidden' : ''}`}
             />
-            {!localStream && (
+            {!hasLocalVideo && (
               <div className="video-local video-placeholder">Starting camera…</div>
             )}
           </div>
@@ -134,9 +162,19 @@ export function VideoCall({
               {muted ? '🔇' : '🎤'}
             </button>
             {isVideo && (
-              <button type="button" onClick={onToggleVideo} title={videoOff ? 'Camera on' : 'Camera off'}>
-                {videoOff ? '📷' : '📹'}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={onSwitchCamera}
+                  title={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
+                  aria-label={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
+                >
+                  🔄
+                </button>
+                <button type="button" onClick={onToggleVideo} title={videoOff ? 'Camera on' : 'Camera off'}>
+                  {videoOff ? '📷' : '📹'}
+                </button>
+              </>
             )}
             <button type="button" className="btn-end" onClick={onEnd}>
               End call

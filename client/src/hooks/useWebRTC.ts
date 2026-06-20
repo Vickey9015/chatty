@@ -6,10 +6,29 @@ const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    ...(import.meta.env.VITE_TURN_URL &&
+    import.meta.env.VITE_TURN_USERNAME &&
+    import.meta.env.VITE_TURN_CREDENTIAL
+      ? [
+          {
+            urls: import.meta.env.VITE_TURN_URL,
+            username: import.meta.env.VITE_TURN_USERNAME,
+            credential: import.meta.env.VITE_TURN_CREDENTIAL,
+          },
+        ]
+      : []),
   ],
 };
 
-function mergeRemoteTrack(prev: MediaStream | null, event: RTCTrackEvent): MediaStream {
+function snapshotRemoteStream(stream: MediaStream): MediaStream {
+  return new MediaStream(stream.getTracks());
+}
+
+function applyRemoteTrack(prev: MediaStream | null, event: RTCTrackEvent): MediaStream {
+  if (event.streams[0]) {
+    return event.streams[0];
+  }
+
   const stream = prev ?? new MediaStream();
   const track = event.track;
   if (!stream.getTracks().some((t) => t.id === track.id)) {
@@ -18,7 +37,10 @@ function mergeRemoteTrack(prev: MediaStream | null, event: RTCTrackEvent): Media
   return stream;
 }
 
-export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
+export function useWebRTC(
+  socketRef: React.RefObject<Socket | null>,
+  connected: boolean,
+) {
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
@@ -38,6 +60,8 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
   });
   const [muted, setMuted] = useState(false);
   const [videoOff, setVideoOff] = useState(false);
+  const facingModeRef = useRef<'user' | 'environment'>('user');
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
   const updateCall = useCallback((next: CallState | ((prev: CallState) => CallState)) => {
     setCall((prev) => {
@@ -49,7 +73,7 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
 
   const setRemote = useCallback((stream: MediaStream | null) => {
     remoteStreamRef.current = stream;
-    setRemoteStream(stream);
+    setRemoteStream(stream ? snapshotRemoteStream(stream) : null);
   }, []);
 
   const cleanup = useCallback(() => {
@@ -66,6 +90,8 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
     setRemote(null);
     setMuted(false);
     setVideoOff(false);
+    facingModeRef.current = 'user';
+    setFacingMode('user');
     updateCall({ status: 'idle', remoteUserId: null, remoteUsername: null, mode: null });
   }, [setRemote, updateCall]);
 
@@ -108,8 +134,9 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
       peer.ontrack = (event) => {
-        const merged = mergeRemoteTrack(remoteStreamRef.current, event);
-        setRemote(merged);
+        const merged = applyRemoteTrack(remoteStreamRef.current, event);
+        remoteStreamRef.current = merged;
+        setRemoteStream(snapshotRemoteStream(merged));
       };
 
       peer.onicecandidate = (event) => {
@@ -130,14 +157,16 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
       peerRef.current = peer;
       return peer;
     },
-    [socketRef, setRemote],
+    [socketRef],
   );
 
-  const getMedia = useCallback(async (mode: CallMode) => {
+  const getMedia = useCallback(async (mode: CallMode, facing: 'user' | 'environment' = facingModeRef.current) => {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: mode === 'video' ? { facingMode: 'user' } : false,
+      video: mode === 'video' ? { facingMode: facing } : false,
       audio: true,
     });
+    facingModeRef.current = facing;
+    setFacingMode(facing);
     localStreamRef.current = stream;
     setLocalStream(stream);
     setVideoOff(false);
@@ -159,7 +188,10 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
 
         const stream = await getMedia(mode);
         const peer = setupPeer(stream);
-        const offer = await peer.createOffer();
+        const offer = await peer.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: mode === 'video',
+        });
         await peer.setLocalDescription(offer);
         socketRef.current?.emit('call_user', { targetId, signal: offer, callType: mode });
       } catch {
@@ -186,7 +218,10 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
       const peer = setupPeer(stream);
       await peer.setRemoteDescription(new RTCSessionDescription(offer));
       await flushPendingCandidates(peer);
-      const answer = await peer.createAnswer();
+      const answer = await peer.createAnswer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: mode === 'video',
+      });
       await peer.setLocalDescription(answer);
       socketRef.current?.emit('answer_call', { to: remoteId, signal: answer });
       updateCall((c) => ({ ...c, status: 'active' }));
@@ -215,6 +250,7 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
   }, [socketRef, cleanup]);
 
   useEffect(() => {
+    if (!connected) return;
     const socket = socketRef.current;
     if (!socket) return;
 
@@ -270,7 +306,7 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
       socket.off('ice_candidate', onIce);
       socket.off('call_ended', onEnded);
     };
-  }, [socketRef, cleanup, addIceCandidate, flushPendingCandidates, updateCall]);
+  }, [connected, socketRef, cleanup, addIceCandidate, flushPendingCandidates, updateCall]);
 
   const toggleMute = () => {
     localStreamRef.current?.getAudioTracks().forEach((t) => {
@@ -287,17 +323,61 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
     setVideoOff((v) => !v);
   };
 
+  const switchCamera = useCallback(async () => {
+    if (call.mode !== 'video') return;
+
+    const peer = peerRef.current;
+    const stream = localStreamRef.current;
+    if (!peer || !stream) return;
+
+    const oldVideoTrack = stream.getVideoTracks()[0];
+    if (!oldVideoTrack) return;
+
+    const nextFacing: 'user' | 'environment' =
+      facingModeRef.current === 'user' ? 'environment' : 'user';
+
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: nextFacing },
+        audio: false,
+      });
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      newVideoTrack.enabled = oldVideoTrack.enabled;
+
+      const sender = peer.getSenders().find((s) => s.track?.kind === 'video');
+      if (sender) {
+        await sender.replaceTrack(newVideoTrack);
+      }
+
+      stream.removeTrack(oldVideoTrack);
+      oldVideoTrack.stop();
+      stream.addTrack(newVideoTrack);
+      newStream.getTracks().forEach((track) => {
+        if (track !== newVideoTrack) track.stop();
+      });
+
+      facingModeRef.current = nextFacing;
+      setFacingMode(nextFacing);
+      localStreamRef.current = stream;
+      setLocalStream(new MediaStream(stream.getTracks()));
+    } catch {
+      alert('Could not switch camera. This device may only have one camera.');
+    }
+  }, [call.mode]);
+
   return {
     localStream,
     remoteStream,
     call,
     muted,
     videoOff,
+    facingMode,
     startCall,
     acceptCall,
     rejectCall,
     endCall,
     toggleMute,
     toggleVideo,
+    switchCamera,
   };
 }
