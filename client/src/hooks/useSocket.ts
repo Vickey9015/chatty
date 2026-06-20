@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { getSocketOptions } from '../lib/socketOptions';
 import type { ChatMessage, RoomUser } from '../types';
 
 const SERVER_URL =
@@ -19,7 +20,7 @@ export function useSocket(lock: string, key: string) {
   useEffect(() => {
     setJoinError(null);
     setUsername('');
-    const socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
+    const socket = io(SERVER_URL, getSocketOptions());
     socketRef.current = socket;
 
     socket.on('connect', () => {

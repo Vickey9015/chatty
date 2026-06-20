@@ -160,21 +160,37 @@ io.on('connection', (socket) => {
     socket.to(room).emit('typing', { username, isTyping });
   });
 
-  // WebRTC signaling
-  socket.on('call_user', ({ targetId, signal, callType }) => {
+  // WebRTC signaling — call_ring rings immediately; call_user sends the WebRTC offer
+  socket.on('call_ring', ({ targetId, callType }) => {
+    if (!targetId || !users.has(targetId)) {
+      socket.emit('call_error', {
+        error: 'User is offline. Open the Online list and try again.',
+      });
+      return;
+    }
     io.to(targetId).emit('incoming_call', {
       from: socket.id,
       username: socket.data.username,
-      signal,
+      callType: callType === 'audio' ? 'audio' : 'video',
+    });
+  });
+
+  socket.on('call_user', ({ targetId, signal, callType }) => {
+    if (!targetId || !signal?.type || !signal?.sdp) return;
+    if (!users.has(targetId)) return;
+    io.to(targetId).emit('call_offer', {
+      signal: { type: signal.type, sdp: signal.sdp },
       callType: callType === 'audio' ? 'audio' : 'video',
     });
   });
 
   socket.on('answer_call', ({ to, signal }) => {
-    io.to(to).emit('call_accepted', { signal });
+    if (!to || !signal?.type || !signal?.sdp) return;
+    io.to(to).emit('call_accepted', { signal: { type: signal.type, sdp: signal.sdp } });
   });
 
   socket.on('ice_candidate', ({ to, candidate }) => {
+    if (!to || !candidate?.candidate) return;
     io.to(to).emit('ice_candidate', { candidate });
   });
 

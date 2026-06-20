@@ -9,6 +9,7 @@ interface Props {
   muted: boolean;
   videoOff: boolean;
   facingMode: 'user' | 'environment';
+  offerReady: boolean;
   onAccept: () => void;
   onReject: () => void;
   onEnd: () => void;
@@ -39,6 +40,7 @@ export function VideoCall({
   muted,
   videoOff,
   facingMode,
+  offerReady,
   onAccept,
   onReject,
   onEnd,
@@ -62,9 +64,13 @@ export function VideoCall({
   }, [localStream, call.status, isVideo]);
 
   useEffect(() => {
-    if (isVideo) attachStream(remoteRef.current, remoteStream);
-    else attachStream(remoteAudioRef.current, remoteStream);
-  }, [remoteStream, call.status, isVideo]);
+    if (isVideo) {
+      attachStream(remoteRef.current, remoteStream);
+      attachStream(remoteAudioRef.current, remoteStream);
+    } else if (showAudio) {
+      attachStream(remoteAudioRef.current, remoteStream);
+    }
+  }, [remoteStream, call.status, isVideo, showAudio]);
 
   if (call.status === 'idle') return null;
 
@@ -77,6 +83,7 @@ export function VideoCall({
       >
         {showVideos && (
           <div className="video-grid">
+            <audio ref={remoteAudioRef} autoPlay playsInline className="audio-call-stream" />
             <video
               ref={remoteRef}
               autoPlay
@@ -113,9 +120,10 @@ export function VideoCall({
           <div className="call-banner incoming">
             <p>
               Incoming {callLabel.toLowerCase()} from <strong>{call.remoteUsername}</strong>
+              {!offerReady && ' — connecting…'}
             </p>
             <div className="call-actions">
-              <button type="button" className="btn-accept" onClick={onAccept}>
+              <button type="button" className="btn-accept" onClick={onAccept} disabled={!offerReady}>
                 Accept
               </button>
               <button type="button" className="btn-reject" onClick={onReject}>

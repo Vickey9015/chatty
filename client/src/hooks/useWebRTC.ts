@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import { unlockAppAudio } from '../lib/audioUnlock';
+import { mergeRemoteTrack, serializeIceCandidate } from '../lib/webrtcUtils';
 import type { CallMode, CallState } from '../types';
 
 const ICE_SERVERS: RTCConfiguration = {
@@ -10,16 +11,10 @@ const ICE_SERVERS: RTCConfiguration = {
   ],
 };
 
-function mergeRemoteTrack(prev: MediaStream | null, event: RTCTrackEvent): MediaStream {
-  const stream = prev ?? new MediaStream();
-  const track = event.track;
-  if (!stream.getTracks().some((t) => t.id === track.id)) {
-    stream.addTrack(track);
-  }
-  return stream;
-}
-
-export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
+export function useWebRTC(
+  socketRef: React.RefObject<Socket | null>,
+  connected: boolean,
+) {
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
@@ -31,6 +26,7 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
 
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [offerReady, setOfferReady] = useState(false);
   const [call, setCall] = useState<CallState>({
     status: 'idle',
     remoteUserId: null,
@@ -67,6 +63,7 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
     pendingCandidatesRef.current = [];
     setLocalStream(null);
     setRemote(null);
+    setOfferReady(false);
     setMuted(false);
     setVideoOff(false);
     facingModeRef.current = 'user';
@@ -86,25 +83,22 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
     }
   }, []);
 
-  const addIceCandidate = useCallback(
-    async (candidate: RTCIceCandidateInit) => {
-      const peer = peerRef.current;
-      if (!peer) {
-        pendingCandidatesRef.current.push(candidate);
-        return;
-      }
-      if (!peer.remoteDescription) {
-        pendingCandidatesRef.current.push(candidate);
-        return;
-      }
-      try {
-        await peer.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch {
-        /* ignore */
-      }
-    },
-    [],
-  );
+  const addIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
+    const peer = peerRef.current;
+    if (!peer) {
+      pendingCandidatesRef.current.push(candidate);
+      return;
+    }
+    if (!peer.remoteDescription) {
+      pendingCandidatesRef.current.push(candidate);
+      return;
+    }
+    try {
+      await peer.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const setupPeer = useCallback(
     (stream: MediaStream) => {
@@ -113,22 +107,19 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
       peer.ontrack = (event) => {
+        event.track.enabled = true;
         const merged = mergeRemoteTrack(remoteStreamRef.current, event);
+        remoteStreamRef.current = merged;
         setRemote(merged);
       };
 
       peer.onicecandidate = (event) => {
-        if (event.candidate && remoteIdRef.current) {
+        const candidate = serializeIceCandidate(event.candidate);
+        if (candidate && remoteIdRef.current) {
           socketRef.current?.emit('ice_candidate', {
             to: remoteIdRef.current,
-            candidate: event.candidate,
+            candidate,
           });
-        }
-      };
-
-      peer.onconnectionstatechange = () => {
-        if (peer.connectionState === 'failed') {
-          console.warn('WebRTC connection failed');
         }
       };
 
@@ -158,12 +149,16 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
         remoteIdRef.current = targetId;
         pendingCandidatesRef.current = [];
         setRemote(null);
+        setOfferReady(false);
         updateCall({
           status: 'calling',
           remoteUserId: targetId,
           remoteUsername: targetName,
           mode,
         });
+
+        // Ring the other person immediately — don't wait for camera/mic.
+        socketRef.current?.emit('call_ring', { targetId, callType: mode });
 
         const stream = await getMedia(mode);
         const peer = setupPeer(stream);
@@ -224,6 +219,7 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
   }, [socketRef, cleanup]);
 
   useEffect(() => {
+    if (!connected) return;
     const socket = socketRef.current;
     if (!socket) return;
 
@@ -235,7 +231,7 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
     }: {
       from: string;
       username: string;
-      signal: RTCSessionDescriptionInit;
+      signal?: RTCSessionDescriptionInit;
       callType?: CallMode;
     }) => {
       if (callStatusRef.current !== 'idle') {
@@ -244,15 +240,28 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
       }
       const mode: CallMode = callType === 'audio' ? 'audio' : 'video';
       remoteIdRef.current = from;
-      pendingOfferRef.current = signal;
       pendingCallModeRef.current = mode;
       pendingCandidatesRef.current = [];
+      if (signal?.type && signal?.sdp) {
+        pendingOfferRef.current = signal;
+        setOfferReady(true);
+      } else {
+        pendingOfferRef.current = null;
+        setOfferReady(false);
+      }
       updateCall({ status: 'incoming', remoteUserId: from, remoteUsername: username, mode });
+    };
+
+    const onOffer = ({ signal }: { signal: RTCSessionDescriptionInit }) => {
+      if (signal?.type && signal?.sdp) {
+        pendingOfferRef.current = signal;
+        setOfferReady(true);
+      }
     };
 
     const onAccepted = async ({ signal }: { signal: RTCSessionDescriptionInit }) => {
       const peer = peerRef.current;
-      if (!peer) return;
+      if (!peer || !signal?.type || !signal?.sdp) return;
       try {
         await peer.setRemoteDescription(new RTCSessionDescription(signal));
         await flushPendingCandidates(peer);
@@ -263,23 +272,32 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
     };
 
     const onIce = ({ candidate }: { candidate: RTCIceCandidateInit }) => {
-      if (candidate) void addIceCandidate(candidate);
+      if (candidate?.candidate) void addIceCandidate(candidate);
     };
 
     const onEnded = () => cleanup();
 
+    const onCallError = ({ error }: { error: string }) => {
+      alert(error);
+      cleanup();
+    };
+
     socket.on('incoming_call', onIncoming);
+    socket.on('call_offer', onOffer);
     socket.on('call_accepted', onAccepted);
     socket.on('ice_candidate', onIce);
     socket.on('call_ended', onEnded);
+    socket.on('call_error', onCallError);
 
     return () => {
       socket.off('incoming_call', onIncoming);
+      socket.off('call_offer', onOffer);
       socket.off('call_accepted', onAccepted);
       socket.off('ice_candidate', onIce);
       socket.off('call_ended', onEnded);
+      socket.off('call_error', onCallError);
     };
-  }, [socketRef, cleanup, addIceCandidate, flushPendingCandidates, updateCall]);
+  }, [connected, socketRef, cleanup, addIceCandidate, flushPendingCandidates, updateCall]);
 
   const toggleMute = () => {
     localStreamRef.current?.getAudioTracks().forEach((t) => {
@@ -342,6 +360,7 @@ export function useWebRTC(socketRef: React.RefObject<Socket | null>) {
     localStream,
     remoteStream,
     call,
+    offerReady,
     muted,
     videoOff,
     facingMode,

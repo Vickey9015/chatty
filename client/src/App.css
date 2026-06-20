@@ -716,6 +716,11 @@ body {
   cursor: pointer;
 }
 
+.btn-accept:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn-reject,
 .btn-end {
   padding: 0.65rem 1.5rem;
