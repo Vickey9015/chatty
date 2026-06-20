@@ -3,6 +3,7 @@ export function getRtcConfiguration(): RTCConfiguration {
   const servers: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
   ];
 
   if (
@@ -16,22 +17,28 @@ export function getRtcConfiguration(): RTCConfiguration {
       credential: import.meta.env.VITE_TURN_CREDENTIAL,
     });
   } else {
-    // Public TURN fallback — required for most cross-network video calls on the web.
-    servers.push({
-      urls: [
-        'turn:openrelay.metered.ca:80',
-        'turn:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp',
-        'turns:openrelay.metered.ca:443',
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    });
+    servers.push(
+      {
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+          'turn:openrelay.metered.ca:443?transport=tcp',
+          'turns:openrelay.metered.ca:443',
+        ],
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+      },
+      {
+        urls: 'turn:numb.viagenie.ca',
+        username: 'webrtc@live.com',
+        credential: 'muazkh',
+      },
+    );
   }
 
   return {
     iceServers: servers,
-    iceCandidatePoolSize: 10,
+    iceCandidatePoolSize: 0,
     bundlePolicy: 'max-bundle',
     rtcpMuxPolicy: 'require',
   };

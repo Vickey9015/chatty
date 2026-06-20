@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import { unlockAppAudio } from '../lib/audioUnlock';
 import { getRtcConfiguration, serializeIceCandidate } from '../lib/iceServers';
+import { toSessionDescription, waitForIceGatheringComplete } from '../lib/iceGathering';
 import { mergeRemoteTrack, snapshotStream } from '../lib/mediaStream';
 import type { CallMode, CallState } from '../types';
 
@@ -130,7 +131,6 @@ export function useWebRTC(
           setConnectionState('connecting');
         } else if (state === 'failed') {
           setConnectionState('failed');
-          void peer.restartIce();
         } else if (state === 'disconnected') {
           setConnectionState('disconnected');
         }
@@ -139,7 +139,8 @@ export function useWebRTC(
       peer.onconnectionstatechange = () => {
         if (peer.connectionState === 'failed') {
           setConnectionState('failed');
-          void peer.restartIce();
+        } else if (peer.connectionState === 'connected') {
+          setConnectionState('connected');
         }
       };
 
@@ -181,7 +182,10 @@ export function useWebRTC(
         const peer = setupPeer(stream);
         const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
-        socketRef.current?.emit('call_user', { targetId, signal: offer, callType: mode });
+        await waitForIceGatheringComplete(peer);
+        const signal = toSessionDescription(peer.localDescription);
+        if (!signal) throw new Error('Failed to create offer');
+        socketRef.current?.emit('call_user', { targetId, signal, callType: mode });
       } catch {
         cleanup();
         alert(
@@ -206,11 +210,16 @@ export function useWebRTC(
       setConnectionState('connecting');
       const stream = await getMedia(mode);
       const peer = setupPeer(stream);
-      await peer.setRemoteDescription(new RTCSessionDescription(offer));
+      const remoteOffer = toSessionDescription(offer);
+      if (!remoteOffer) throw new Error('Invalid offer');
+      await peer.setRemoteDescription(new RTCSessionDescription(remoteOffer));
       await flushPendingCandidates(peer);
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
-      socketRef.current?.emit('answer_call', { to: remoteId, signal: answer });
+      await waitForIceGatheringComplete(peer);
+      const signal = toSessionDescription(peer.localDescription);
+      if (!signal) throw new Error('Failed to create answer');
+      socketRef.current?.emit('answer_call', { to: remoteId, signal });
       updateCall((c) => ({ ...c, status: 'active' }));
     } catch {
       cleanup();
@@ -268,11 +277,14 @@ export function useWebRTC(
       const peer = peerRef.current;
       if (!peer) return;
       try {
-        await peer.setRemoteDescription(new RTCSessionDescription(signal));
+        const remoteAnswer = toSessionDescription(signal);
+        if (!remoteAnswer) throw new Error('Invalid answer');
+        await peer.setRemoteDescription(new RTCSessionDescription(remoteAnswer));
         await flushPendingCandidates(peer);
         updateCall((c) => ({ ...c, status: 'active' }));
       } catch (err) {
         console.error('Failed to handle call answer', err);
+        setConnectionState('failed');
       }
     };
 
@@ -282,16 +294,23 @@ export function useWebRTC(
 
     const onEnded = () => cleanup();
 
+    const onCallError = ({ error }: { error: string }) => {
+      alert(error);
+      cleanup();
+    };
+
     socket.on('incoming_call', onIncoming);
     socket.on('call_accepted', onAccepted);
     socket.on('ice_candidate', onIce);
     socket.on('call_ended', onEnded);
+    socket.on('call_error', onCallError);
 
     return () => {
       socket.off('incoming_call', onIncoming);
       socket.off('call_accepted', onAccepted);
       socket.off('ice_candidate', onIce);
       socket.off('call_ended', onEnded);
+      socket.off('call_error', onCallError);
     };
   }, [connected, socketRef, cleanup, addIceCandidate, flushPendingCandidates, updateCall]);
 

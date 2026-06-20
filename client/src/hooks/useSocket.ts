@@ -29,6 +29,10 @@ export function useSocket(lock: string, key: string) {
       socket.emit('join', { lock, key });
     });
 
+    socket.on('connect_error', (err) => {
+      console.warn('Socket connect error:', err.message);
+    });
+
     socket.on('disconnect', () => setConnected(false));
 
     socket.on('join_error', ({ error }: { error: string }) => {
