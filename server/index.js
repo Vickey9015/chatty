@@ -40,10 +40,6 @@ const io = new Server(httpServer, {
     origin: serveClient ? true : allowedOrigins,
     methods: ['GET', 'POST'],
   },
-  pingTimeout: 60000,
-  pingInterval: 25000,
-  maxHttpBufferSize: 5e6,
-  transports: ['polling', 'websocket'],
 });
 
 app.use(
@@ -166,26 +162,19 @@ io.on('connection', (socket) => {
 
   // WebRTC signaling
   socket.on('call_user', ({ targetId, signal, callType }) => {
-    if (!targetId || !signal?.type || !signal?.sdp) return;
-    if (!users.has(targetId)) {
-      socket.emit('call_error', { error: 'User is offline. Refresh the online list and try again.' });
-      return;
-    }
     io.to(targetId).emit('incoming_call', {
       from: socket.id,
       username: socket.data.username,
-      signal: { type: signal.type, sdp: signal.sdp },
+      signal,
       callType: callType === 'audio' ? 'audio' : 'video',
     });
   });
 
   socket.on('answer_call', ({ to, signal }) => {
-    if (!to || !signal?.type || !signal?.sdp) return;
-    io.to(to).emit('call_accepted', { signal: { type: signal.type, sdp: signal.sdp } });
+    io.to(to).emit('call_accepted', { signal });
   });
 
   socket.on('ice_candidate', ({ to, candidate }) => {
-    if (!to || !candidate?.candidate) return;
     io.to(to).emit('ice_candidate', { candidate });
   });
 

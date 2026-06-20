@@ -26,7 +26,7 @@ export function ChatRoom({ lock, keySecret, onLeave }: Props) {
     setTyping,
   } = useSocket(lock, keySecret);
 
-  const webrtc = useWebRTC(socket, connected);
+  const webrtc = useWebRTC(socket);
   const callActive = webrtc.call.status !== 'idle';
   const [showUsers, setShowUsers] = useState(false);
 
@@ -112,7 +112,6 @@ export function ChatRoom({ lock, keySecret, onLeave }: Props) {
         muted={webrtc.muted}
         videoOff={webrtc.videoOff}
         facingMode={webrtc.facingMode}
-        connectionState={webrtc.connectionState}
         onAccept={webrtc.acceptCall}
         onReject={webrtc.rejectCall}
         onEnd={webrtc.endCall}

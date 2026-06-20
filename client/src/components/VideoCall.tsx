@@ -1,7 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { useCallRingtone } from '../hooks/useCallRingtone';
-import type { ConnectionState } from '../hooks/useWebRTC';
-import { hasLiveTrack } from '../lib/mediaStream';
 import type { CallState } from '../types';
 
 interface Props {
@@ -11,7 +9,6 @@ interface Props {
   muted: boolean;
   videoOff: boolean;
   facingMode: 'user' | 'environment';
-  connectionState: ConnectionState;
   onAccept: () => void;
   onReject: () => void;
   onEnd: () => void;
@@ -25,33 +22,14 @@ function attachStream(
   stream: MediaStream | null,
 ) {
   if (!el) return;
-
-  const play = () => {
+  if (el.srcObject !== stream) {
+    el.srcObject = stream;
+  }
+  if (stream) {
     void el.play().catch(() => {
       /* autoplay may need user gesture */
     });
-  };
-
-  if (!stream) {
-    if (el.srcObject) {
-      el.srcObject = null;
-    }
-    return;
   }
-
-  const current = el.srcObject as MediaStream | null;
-  const needsRefresh =
-    !current ||
-    current.id !== stream.id ||
-    current.getTracks().length !== stream.getTracks().length;
-
-  if (needsRefresh) {
-    el.srcObject = stream;
-  }
-
-  play();
-  stream.onaddtrack = play;
-  stream.onremovetrack = play;
 }
 
 export function VideoCall({
@@ -61,7 +39,6 @@ export function VideoCall({
   muted,
   videoOff,
   facingMode,
-  connectionState,
   onAccept,
   onReject,
   onEnd,
@@ -76,22 +53,18 @@ export function VideoCall({
   const isVideo = call.mode === 'video';
   const showVideos = isVideo && (call.status === 'active' || call.status === 'calling');
   const showAudio = !isVideo && call.status === 'active';
-  const hasRemoteVideo = hasLiveTrack(remoteStream, 'video');
-  const hasRemoteAudio = hasLiveTrack(remoteStream, 'audio');
-  const hasLocalVideo = hasLiveTrack(localStream, 'video');
 
   const isRinging = call.status === 'incoming' || call.status === 'calling';
   useCallRingtone(isRinging);
 
   useEffect(() => {
-    if (showVideos) attachStream(localRef.current, localStream);
-  }, [localStream, showVideos]);
+    if (isVideo) attachStream(localRef.current, localStream);
+  }, [localStream, call.status, isVideo]);
 
   useEffect(() => {
-    if (!showVideos && !showAudio) return;
-    attachStream(remoteAudioRef.current, remoteStream);
     if (isVideo) attachStream(remoteRef.current, remoteStream);
-  }, [remoteStream, showVideos, showAudio, isVideo]);
+    else attachStream(remoteAudioRef.current, remoteStream);
+  }, [remoteStream, call.status, isVideo]);
 
   if (call.status === 'idle') return null;
 
@@ -104,30 +77,23 @@ export function VideoCall({
       >
         {showVideos && (
           <div className="video-grid">
-            <audio ref={remoteAudioRef} autoPlay playsInline className="audio-call-stream" />
             <video
               ref={remoteRef}
               autoPlay
               playsInline
-              className={`video-remote ${!hasRemoteVideo ? 'video-hidden' : ''}`}
+              className={`video-remote ${!remoteStream ? 'video-hidden' : ''}`}
             />
-            {!hasRemoteVideo && (
-              <div className="video-remote video-placeholder">
-                {connectionState === 'failed'
-                  ? 'Connection failed — try ending and calling again'
-                  : connectionState === 'connected' && hasRemoteAudio
-                    ? 'Connected — waiting for video…'
-                    : 'Connecting…'}
-              </div>
+            {!remoteStream && (
+              <div className="video-remote video-placeholder">Waiting for video…</div>
             )}
             <video
               ref={localRef}
               autoPlay
               playsInline
               muted
-              className={`video-local ${!hasLocalVideo ? 'video-hidden' : ''}`}
+              className={`video-local ${!localStream ? 'video-hidden' : ''}`}
             />
-            {!hasLocalVideo && (
+            {!localStream && (
               <div className="video-local video-placeholder">Starting camera…</div>
             )}
           </div>
