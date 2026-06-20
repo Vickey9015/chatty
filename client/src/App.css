@@ -102,8 +102,11 @@ body {
 
 .input-icon {
   position: absolute;
-  left: 0.9rem;
+  left: 0.85rem;
+  width: 1.35rem;
+  text-align: center;
   font-size: 0.95rem;
+  line-height: 1;
   pointer-events: none;
   opacity: 0.75;
   z-index: 1;
@@ -111,7 +114,7 @@ body {
 
 .input-modern {
   width: 100%;
-  padding: 0.85rem 1rem 0.85rem 2.65rem;
+  padding: 0.85rem 1rem 0.85rem 2.85rem;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: linear-gradient(180deg, #2a2f42 0%, var(--surface-2) 100%);
@@ -174,19 +177,6 @@ body {
   color: var(--text-muted);
 }
 
-.login-card input {
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  color: var(--text);
-  font-size: 1rem;
-}
-
-.login-card input:focus {
-  outline: 2px solid var(--accent);
-  border-color: transparent;
-}
 
 .btn-primary {
   margin-top: 0.25rem;
@@ -855,8 +845,7 @@ body {
     margin: auto 0;
   }
 
-  .input-modern,
-  .login-card input {
+  .input-modern {
     font-size: 16px; /* prevents iOS zoom on focus */
   }
 

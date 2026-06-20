@@ -53,7 +53,6 @@ export function LoginScreen({ onJoin }: Props) {
                 id="lock"
                 type="text"
                 className="input-modern"
-                placeholder="Choose a unique lock name"
                 value={lock}
                 onChange={(e) => setLock(e.target.value)}
                 maxLength={32}
@@ -75,7 +74,6 @@ export function LoginScreen({ onJoin }: Props) {
                 id="key"
                 type={showKey ? 'text' : 'password'}
                 className="input-modern input-modern-key"
-                placeholder="Your secret key"
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
                 maxLength={64}

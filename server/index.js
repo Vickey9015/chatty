@@ -26,7 +26,9 @@ const httpServer = createServer(app);
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
 const publicDir = path.join(__dirname, '..', 'public');
 const staticDir = fs.existsSync(clientDist) ? clientDist : fs.existsSync(publicDir) ? publicDir : null;
-const serveClient = staticDir !== null;
+const isProduction = process.env.NODE_ENV === 'production';
+const serveClient = isProduction && staticDir !== null;
+const devClientUrl = process.env.CLIENT_URL?.split(',')[0]?.trim() || 'http://localhost:5173';
 
 const allowedOrigins = process.env.CLIENT_URL
   ? process.env.CLIENT_URL.split(',').map((o) => o.trim())
@@ -195,6 +197,10 @@ if (serveClient && staticDir) {
   app.get(/^(?!\/api|\/uploads|\/socket\.io|\/health).*/, (_req, res) => {
     res.sendFile(path.join(staticDir, 'index.html'));
   });
+} else if (!isProduction) {
+  app.get('/', (_req, res) => {
+    res.redirect(devClientUrl);
+  });
 }
 
 const PORT = Number(process.env.PORT) || 3001;
@@ -256,8 +262,12 @@ async function connectDb() {
 
 function start() {
   httpServer.listen(PORT, HOST, () => {
-    const mode = serveClient ? 'app + API' : 'API only (run client separately in dev)';
-    console.log(`LockyChat server (${mode}) → http://${HOST}:${PORT}`);
+    if (serveClient) {
+      console.log(`LockyChat server (app + API) → http://${HOST}:${PORT}`);
+    } else {
+      console.log(`LockyChat server (API only) → http://${HOST}:${PORT}`);
+      console.log(`Open the app in dev → ${devClientUrl}`);
+    }
     void connectDb();
   });
 }
