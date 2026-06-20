@@ -25,3 +25,7 @@ export function mergeRemoteTrack(
   }
   return stream;
 }
+
+export function snapshotStream(stream: MediaStream): MediaStream {
+  return new MediaStream(stream.getTracks());
+}

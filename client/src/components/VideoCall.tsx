@@ -23,14 +23,30 @@ function attachStream(
   stream: MediaStream | null,
 ) {
   if (!el) return;
-  if (el.srcObject !== stream) {
-    el.srcObject = stream;
-  }
-  if (stream) {
+
+  const play = () => {
     void el.play().catch(() => {
       /* autoplay may need user gesture */
     });
+  };
+
+  if (!stream) {
+    el.srcObject = null;
+    return;
   }
+
+  const current = el.srcObject as MediaStream | null;
+  const needsAttach =
+    !current ||
+    current.id !== stream.id ||
+    current.getTracks().length !== stream.getTracks().length;
+
+  if (needsAttach) {
+    el.srcObject = stream;
+  }
+
+  play();
+  stream.onaddtrack = play;
 }
 
 export function VideoCall({

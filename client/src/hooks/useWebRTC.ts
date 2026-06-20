@@ -1,15 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import { unlockAppAudio } from '../lib/audioUnlock';
-import { mergeRemoteTrack, serializeIceCandidate } from '../lib/webrtcUtils';
+import { getIceServers } from '../lib/iceServers';
+import { mergeRemoteTrack, serializeIceCandidate, snapshotStream } from '../lib/webrtcUtils';
 import type { CallMode, CallState } from '../types';
-
-const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-  ],
-};
 
 export function useWebRTC(
   socketRef: React.RefObject<Socket | null>,
@@ -48,7 +42,7 @@ export function useWebRTC(
 
   const setRemote = useCallback((stream: MediaStream | null) => {
     remoteStreamRef.current = stream;
-    setRemoteStream(stream);
+    setRemoteStream(stream ? snapshotStream(stream) : null);
   }, []);
 
   const cleanup = useCallback(() => {
@@ -102,7 +96,7 @@ export function useWebRTC(
 
   const setupPeer = useCallback(
     (stream: MediaStream) => {
-      const peer = new RTCPeerConnection(ICE_SERVERS);
+      const peer = new RTCPeerConnection(getIceServers());
 
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
