@@ -112,6 +112,7 @@ export function ChatRoom({ lock, keySecret, onLeave }: Props) {
         muted={webrtc.muted}
         videoOff={webrtc.videoOff}
         facingMode={webrtc.facingMode}
+        connectionState={webrtc.connectionState}
         onAccept={webrtc.acceptCall}
         onReject={webrtc.rejectCall}
         onEnd={webrtc.endCall}

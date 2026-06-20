@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useCallRingtone } from '../hooks/useCallRingtone';
+import type { ConnectionState } from '../hooks/useWebRTC';
+import { hasLiveTrack } from '../lib/mediaStream';
 import type { CallState } from '../types';
 
 interface Props {
@@ -9,6 +11,7 @@ interface Props {
   muted: boolean;
   videoOff: boolean;
   facingMode: 'user' | 'environment';
+  connectionState: ConnectionState;
   onAccept: () => void;
   onReject: () => void;
   onEnd: () => void;
@@ -36,7 +39,13 @@ function attachStream(
     return;
   }
 
-  if (el.srcObject !== stream) {
+  const current = el.srcObject as MediaStream | null;
+  const needsRefresh =
+    !current ||
+    current.id !== stream.id ||
+    current.getTracks().length !== stream.getTracks().length;
+
+  if (needsRefresh) {
     el.srcObject = stream;
   }
 
@@ -52,6 +61,7 @@ export function VideoCall({
   muted,
   videoOff,
   facingMode,
+  connectionState,
   onAccept,
   onReject,
   onEnd,
@@ -66,12 +76,9 @@ export function VideoCall({
   const isVideo = call.mode === 'video';
   const showVideos = isVideo && (call.status === 'active' || call.status === 'calling');
   const showAudio = !isVideo && call.status === 'active';
-  const hasRemoteVideo = Boolean(
-    remoteStream?.getVideoTracks().some((track) => track.readyState === 'live'),
-  );
-  const hasLocalVideo = Boolean(
-    localStream?.getVideoTracks().some((track) => track.readyState === 'live'),
-  );
+  const hasRemoteVideo = hasLiveTrack(remoteStream, 'video');
+  const hasRemoteAudio = hasLiveTrack(remoteStream, 'audio');
+  const hasLocalVideo = hasLiveTrack(localStream, 'video');
 
   const isRinging = call.status === 'incoming' || call.status === 'calling';
   useCallRingtone(isRinging);
@@ -82,8 +89,8 @@ export function VideoCall({
 
   useEffect(() => {
     if (!showVideos && !showAudio) return;
+    attachStream(remoteAudioRef.current, remoteStream);
     if (isVideo) attachStream(remoteRef.current, remoteStream);
-    else attachStream(remoteAudioRef.current, remoteStream);
   }, [remoteStream, showVideos, showAudio, isVideo]);
 
   if (call.status === 'idle') return null;
@@ -97,6 +104,7 @@ export function VideoCall({
       >
         {showVideos && (
           <div className="video-grid">
+            <audio ref={remoteAudioRef} autoPlay playsInline className="audio-call-stream" />
             <video
               ref={remoteRef}
               autoPlay
@@ -104,7 +112,13 @@ export function VideoCall({
               className={`video-remote ${!hasRemoteVideo ? 'video-hidden' : ''}`}
             />
             {!hasRemoteVideo && (
-              <div className="video-remote video-placeholder">Waiting for video…</div>
+              <div className="video-remote video-placeholder">
+                {connectionState === 'failed'
+                  ? 'Connection failed — try ending and calling again'
+                  : connectionState === 'connected' && hasRemoteAudio
+                    ? 'Connected — waiting for video…'
+                    : 'Connecting…'}
+              </div>
             )}
             <video
               ref={localRef}

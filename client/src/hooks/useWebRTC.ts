@@ -1,42 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
 import { unlockAppAudio } from '../lib/audioUnlock';
+import { getRtcConfiguration, serializeIceCandidate } from '../lib/iceServers';
+import { mergeRemoteTrack, snapshotStream } from '../lib/mediaStream';
 import type { CallMode, CallState } from '../types';
 
-const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    ...(import.meta.env.VITE_TURN_URL &&
-    import.meta.env.VITE_TURN_USERNAME &&
-    import.meta.env.VITE_TURN_CREDENTIAL
-      ? [
-          {
-            urls: import.meta.env.VITE_TURN_URL,
-            username: import.meta.env.VITE_TURN_USERNAME,
-            credential: import.meta.env.VITE_TURN_CREDENTIAL,
-          },
-        ]
-      : []),
-  ],
-};
-
-function snapshotRemoteStream(stream: MediaStream): MediaStream {
-  return new MediaStream(stream.getTracks());
-}
-
-function applyRemoteTrack(prev: MediaStream | null, event: RTCTrackEvent): MediaStream {
-  if (event.streams[0]) {
-    return event.streams[0];
-  }
-
-  const stream = prev ?? new MediaStream();
-  const track = event.track;
-  if (!stream.getTracks().some((t) => t.id === track.id)) {
-    stream.addTrack(track);
-  }
-  return stream;
-}
+export type ConnectionState = 'new' | 'connecting' | 'connected' | 'failed' | 'disconnected';
 
 export function useWebRTC(
   socketRef: React.RefObject<Socket | null>,
@@ -63,6 +32,7 @@ export function useWebRTC(
   const [videoOff, setVideoOff] = useState(false);
   const facingModeRef = useRef<'user' | 'environment'>('user');
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const [connectionState, setConnectionState] = useState<ConnectionState>('new');
 
   const updateCall = useCallback((next: CallState | ((prev: CallState) => CallState)) => {
     setCall((prev) => {
@@ -74,7 +44,7 @@ export function useWebRTC(
 
   const setRemote = useCallback((stream: MediaStream | null) => {
     remoteStreamRef.current = stream;
-    setRemoteStream(stream ? snapshotRemoteStream(stream) : null);
+    setRemoteStream(stream ? snapshotStream(stream) : null);
   }, []);
 
   const cleanup = useCallback(() => {
@@ -93,6 +63,7 @@ export function useWebRTC(
     setVideoOff(false);
     facingModeRef.current = 'user';
     setFacingMode('user');
+    setConnectionState('new');
     updateCall({ status: 'idle', remoteUserId: null, remoteUsername: null, mode: null });
   }, [setRemote, updateCall]);
 
@@ -130,28 +101,45 @@ export function useWebRTC(
 
   const setupPeer = useCallback(
     (stream: MediaStream) => {
-      const peer = new RTCPeerConnection(ICE_SERVERS);
+      const peer = new RTCPeerConnection(getRtcConfiguration());
 
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
       peer.ontrack = (event) => {
-        const merged = applyRemoteTrack(remoteStreamRef.current, event);
+        event.track.enabled = true;
+        const merged = mergeRemoteTrack(remoteStreamRef.current, event);
         remoteStreamRef.current = merged;
-        setRemoteStream(snapshotRemoteStream(merged));
+        setRemoteStream(snapshotStream(merged));
       };
 
       peer.onicecandidate = (event) => {
-        if (event.candidate && remoteIdRef.current) {
+        const candidate = serializeIceCandidate(event.candidate);
+        if (candidate && remoteIdRef.current) {
           socketRef.current?.emit('ice_candidate', {
             to: remoteIdRef.current,
-            candidate: event.candidate,
+            candidate,
           });
+        }
+      };
+
+      peer.oniceconnectionstatechange = () => {
+        const state = peer.iceConnectionState;
+        if (state === 'connected' || state === 'completed') {
+          setConnectionState('connected');
+        } else if (state === 'checking' || state === 'new') {
+          setConnectionState('connecting');
+        } else if (state === 'failed') {
+          setConnectionState('failed');
+          void peer.restartIce();
+        } else if (state === 'disconnected') {
+          setConnectionState('disconnected');
         }
       };
 
       peer.onconnectionstatechange = () => {
         if (peer.connectionState === 'failed') {
-          console.warn('WebRTC connection failed');
+          setConnectionState('failed');
+          void peer.restartIce();
         }
       };
 
@@ -181,6 +169,7 @@ export function useWebRTC(
         remoteIdRef.current = targetId;
         pendingCandidatesRef.current = [];
         setRemote(null);
+        setConnectionState('connecting');
         updateCall({
           status: 'calling',
           remoteUserId: targetId,
@@ -190,10 +179,7 @@ export function useWebRTC(
 
         const stream = await getMedia(mode);
         const peer = setupPeer(stream);
-        const offer = await peer.createOffer({
-          offerToReceiveAudio: true,
-          offerToReceiveVideo: mode === 'video',
-        });
+        const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
         socketRef.current?.emit('call_user', { targetId, signal: offer, callType: mode });
       } catch {
@@ -217,14 +203,12 @@ export function useWebRTC(
     try {
       unlockAppAudio();
       setRemote(null);
+      setConnectionState('connecting');
       const stream = await getMedia(mode);
       const peer = setupPeer(stream);
       await peer.setRemoteDescription(new RTCSessionDescription(offer));
       await flushPendingCandidates(peer);
-      const answer = await peer.createAnswer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: mode === 'video',
-      });
+      const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
       socketRef.current?.emit('answer_call', { to: remoteId, signal: answer });
       updateCall((c) => ({ ...c, status: 'active' }));
@@ -293,7 +277,7 @@ export function useWebRTC(
     };
 
     const onIce = ({ candidate }: { candidate: RTCIceCandidateInit }) => {
-      if (candidate) void addIceCandidate(candidate);
+      if (candidate?.candidate) void addIceCandidate(candidate);
     };
 
     const onEnded = () => cleanup();
@@ -375,6 +359,7 @@ export function useWebRTC(
     muted,
     videoOff,
     facingMode,
+    connectionState,
     startCall,
     acceptCall,
     rejectCall,
