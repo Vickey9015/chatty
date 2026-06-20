@@ -1,18 +1,18 @@
 import bcrypt from 'bcryptjs';
 import { getPool } from './db.js';
 
-const LOCK_RE = /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$|^[a-z0-9]{1,2}$/;
+const LOCK_RE = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/;
 
 export function normalizeLock(value) {
-  return value.trim().toLowerCase();
+  return value.trim().toLowerCase().replace(/\s+/g, '-');
 }
 
 function validateLock(lock) {
   if (lock.length < 2 || lock.length > 32) {
-    return 'Lock must be 2–32 characters';
+    return 'Lock must be 2–32 characters (letters, numbers, hyphens, underscores)';
   }
   if (!LOCK_RE.test(lock)) {
-    return 'Lock may only use letters, numbers, and hyphens';
+    return 'Lock may only use letters, numbers, hyphens, and underscores';
   }
   return null;
 }

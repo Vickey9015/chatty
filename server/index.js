@@ -22,6 +22,7 @@ if (!fs.existsSync(uploadsDir)) {
 
 const app = express();
 const httpServer = createServer(app);
+app.set('trust proxy', 1);
 
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
 const publicDir = path.join(__dirname, '..', 'public');
@@ -39,6 +40,10 @@ const io = new Server(httpServer, {
     origin: serveClient ? true : allowedOrigins,
     methods: ['GET', 'POST'],
   },
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  maxHttpBufferSize: 1e6,
+  transports: ['polling', 'websocket'],
 });
 
 app.use(

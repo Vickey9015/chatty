@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { unlockLock } from '../api';
+import { unlockAppAudio } from '../lib/audioUnlock';
 
 interface Props {
   onJoin: (lock: string, key: string) => void;
@@ -16,6 +17,7 @@ export function LoginScreen({ onJoin }: Props) {
     e.preventDefault();
     setError(null);
     setLoading(true);
+    unlockAppAudio();
 
     try {
       const result = await unlockLock(lock, key);
@@ -61,7 +63,7 @@ export function LoginScreen({ onJoin }: Props) {
                 required
               />
             </div>
-            <span className="field-hint">First visit creates this lock with your key</span>
+            <span className="field-hint">2–32 chars: letters, numbers, hyphens. Key: 4+ chars.</span>
           </div>
 
           <div className="field">

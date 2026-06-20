@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
+import { unlockAppAudio } from '../lib/audioUnlock';
 import type { CallMode, CallState } from '../types';
 
 const ICE_SERVERS: RTCConfiguration = {
@@ -176,6 +177,7 @@ export function useWebRTC(
   const startCall = useCallback(
     async (targetId: string, targetName: string, mode: CallMode) => {
       try {
+        unlockAppAudio();
         remoteIdRef.current = targetId;
         pendingCandidatesRef.current = [];
         setRemote(null);
@@ -213,6 +215,7 @@ export function useWebRTC(
     if (!remoteId || !offer) return;
 
     try {
+      unlockAppAudio();
       setRemote(null);
       const stream = await getMedia(mode);
       const peer = setupPeer(stream);

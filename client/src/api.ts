@@ -13,12 +13,18 @@ export async function unlockLock(lock: string, key: string): Promise<UnlockResul
   const res = await fetch(`${SERVER_URL}/api/lock/unlock`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lock, key }),
+    body: JSON.stringify({ lock: lock.trim(), key: key.trim() }),
   });
 
-  const data = (await res.json()) as UnlockResult;
+  let data: UnlockResult;
+  try {
+    data = (await res.json()) as UnlockResult;
+  } catch {
+    return { ok: false, error: res.ok ? 'Invalid server response' : `Server error (${res.status})` };
+  }
+
   if (!res.ok && !data.error) {
-    return { ok: false, error: 'Could not reach server' };
+    return { ok: false, error: `Unlock failed (${res.status})` };
   }
   return data;
 }

@@ -154,7 +154,20 @@ hPanel env parsing is inconsistent. Try in this order:
    - `"db": "failed"` → read `mysqlCode`, `mysqlMessage`, `dbHost`, `dbUser`, `attempts`
 6. **Redeploy** after **any** env var change — save variables, then **Redeploy** (Restart alone may not reload env).
 
-### Runtime logs
+### Video calls / ring not working
+
+1. **Redeploy latest `main`** — production uses Socket.io **HTTP polling** (Hostinger LiteSpeed often breaks WebSocket upgrade). Console may still show old WebSocket warnings until redeployed.
+2. **Same lock & key** — both users must unlock the same lock with the matching key.
+3. **HTTPS** — camera/mic require `https://lockychat.com` (not HTTP).
+4. **Ring sound** — tap anywhere on the page once after load (browser autoplay rule). Outgoing ring works after you tap Call; incoming ring works if you already interacted with the page.
+5. **Video across mobile networks** — if both users see only their own camera, add a **TURN server** (`VITE_TURN_URL`, `VITE_TURN_USERNAME`, `VITE_TURN_CREDENTIAL` at build time). STUN alone is not enough on strict NAT/carrier networks.
+
+### `/api/lock/unlock` returns 400
+
+- **Lock** must be 2–32 characters: letters, numbers, hyphens, underscores (spaces become hyphens).
+- **Key** must be 4–64 characters.
+- Wrong key on an existing lock returns **401**, not 400.
+
 
 Open **Runtime logs** in hPanel. A healthy start looks like:
 
